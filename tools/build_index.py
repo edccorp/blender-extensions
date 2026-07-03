@@ -133,6 +133,7 @@ def build_entries(out_dir):
         entry["archive_size"] = len(data)
         entry["archive_hash"] = "sha256:" + hashlib.sha256(data).hexdigest()
         packages[asset["name"]] = {
+            "id": manifest.get("id", ""),
             "repo": repo,
             "asset_id": asset["id"],
             "size": len(data),

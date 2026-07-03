@@ -25,12 +25,18 @@ Blender ──token──▶ extensions.edccorp.com (this gateway on Railway)
 2. **Set environment variables** (service → Variables):
    - `GH_TOKEN` — a fine-grained PAT with **Contents: read** on the four
      product repos (same scope as the `PRODUCTS_TOKEN` Actions secret).
-   - `CUSTOMER_TOKENS` — JSON mapping token → customer label:
+   - `CUSTOMER_TOKENS` — JSON mapping token → customer. A plain label
+     entitles the token to **every** product; an object form scopes it to
+     specific products (each customer's Blender then only sees and can
+     download what they are licensed for):
      ```json
      {"edc_Xk39fj2mQ8vL5nR7tY1wZ4": "Acme Reconstruction LLC",
-      "edc_P2hN8cV6bM4xK9sD3fG7jQ": "Smith Engineering"}
+      "edc_P2hN8cV6bM4xK9sD3fG7jQ": {"name": "Smith Engineering",
+                                     "products": ["recon_toolkit", "point_cloud_toolkit"]}}
      ```
-     Generate tokens with: `python -c "import secrets; print('edc_' + secrets.token_urlsafe(18))"`
+     Product ids: `cammatch`, `hve_toolkit`, `point_cloud_toolkit`,
+     `recon_toolkit` (or `"*"` for all). Generate tokens with:
+     `python -c "import secrets; print('edc_' + secrets.token_urlsafe(18))"`
 3. **Attach the domain**: service → Settings → Networking → Custom Domain →
    `extensions.edccorp.com`. Railway shows a CNAME target; update the DNS
    record for `extensions` (currently pointing at `edccorp.github.io`) to
@@ -53,6 +59,9 @@ before — unauthenticated clients get a 401 with a friendly message.
 
 - **Add a customer**: add an entry to `CUSTOMER_TOKENS` in Railway;
   the service restarts automatically with the new variable.
+- **Change a customer's products**: edit their `products` list — their
+  Blender's view of the repository updates on its next sync (a newly
+  licensed product simply appears; a removed one stops updating).
 - **Revoke a customer**: remove their entry. Their Blender shows an
   authentication error on the next sync; installed add-ons keep working.
 - Downloads and index fetches are logged with the customer label

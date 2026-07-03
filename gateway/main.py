@@ -14,8 +14,14 @@ and download; this app validates it and serves:
     GET /healthz           liveness probe  (public)
 
 Environment variables:
-    CUSTOMER_TOKENS  JSON object mapping token -> customer label, e.g.
-                     {"edc_a1b2c3...": "Acme Reconstruction LLC"}
+    CUSTOMER_TOKENS  JSON object mapping token -> customer. A plain string
+                     label entitles the token to every product:
+                       {"edc_a1b2c3...": "Acme Reconstruction LLC"}
+                     An object form scopes it to specific products (ids from
+                     the extension manifests: cammatch, hve_toolkit,
+                     point_cloud_toolkit, recon_toolkit; "*" = all):
+                       {"edc_a1b2c3...": {"name": "Acme Reconstruction LLC",
+                                          "products": ["recon_toolkit"]}}
     GH_TOKEN         fine-grained GitHub PAT with Contents:read on the
                      product repos (used to stream private release assets)
     ORIGIN_BASE      Pages origin serving index.json/packages.json
@@ -48,15 +54,37 @@ app = FastAPI(title="EDC Software extensions gateway", docs_url=None, redoc_url=
 _origin_cache: dict[str, tuple[float, bytes]] = {}
 
 
-def _authed_customer(request: Request) -> str | None:
-    """Return the customer label for the request's Bearer token, or None."""
-    auth = request.headers.get("authorization", "")
-    if auth.lower().startswith("bearer "):
-        return CUSTOMER_TOKENS.get(auth[7:].strip())
+def _entitlements(raw):
+    """Normalize a CUSTOMER_TOKENS value to {"name": str, "products": [...]}.
+
+    A plain string label means the customer is entitled to every product
+    (the original format keeps working). An object form scopes the token:
+        {"name": "Acme LLC", "products": ["cammatch", "recon_toolkit"]}
+    "*" (or an omitted/empty products list) means all products.
+    """
+    if isinstance(raw, str):
+        return {"name": raw, "products": ["*"]}
+    if isinstance(raw, dict):
+        products = raw.get("products") or ["*"]
+        return {"name": raw.get("name", "unnamed"), "products": list(products)}
     return None
 
 
-def _require_customer(request: Request) -> str:
+def _entitled(customer: dict, product_id: str) -> bool:
+    return "*" in customer["products"] or product_id in customer["products"]
+
+
+def _authed_customer(request: Request) -> dict | None:
+    """Return {"name", "products"} for the request's Bearer token, or None."""
+    auth = request.headers.get("authorization", "")
+    if auth.lower().startswith("bearer "):
+        raw = CUSTOMER_TOKENS.get(auth[7:].strip())
+        if raw is not None:
+            return _entitlements(raw)
+    return None
+
+
+def _require_customer(request: Request) -> dict:
     customer = _authed_customer(request)
     if customer is None:
         raise HTTPException(
@@ -101,7 +129,13 @@ async def landing():
 async def index_json(request: Request):
     customer = _require_customer(request)
     body = await _origin_get("index.json")
-    print(f"[gateway] index fetch by {customer}")
+    if "*" not in customer["products"]:
+        index = json.loads(body)
+        index["data"] = [
+            e for e in index.get("data", []) if _entitled(customer, e.get("id", ""))
+        ]
+        body = json.dumps(index, indent=2).encode()
+    print(f"[gateway] index fetch by {customer['name']}")
     return Response(content=body, media_type="application/json")
 
 
@@ -115,6 +149,15 @@ async def package(filename: str, request: Request):
     entry = packages.get(filename)
     if entry is None:
         raise HTTPException(status_code=404, detail=f"unknown package {filename}")
+    product_id = entry.get("id", "")
+    if product_id and not _entitled(customer, product_id):
+        raise HTTPException(
+            status_code=403,
+            detail=(
+                f"This token is not licensed for {product_id}. "
+                "Contact Engineering Dynamics Company to add it."
+            ),
+        )
 
     # The API asset endpoint works for private repos; the public
     # browser_download_url does not.
@@ -132,7 +175,7 @@ async def package(filename: str, request: Request):
         await client.aclose()
         raise HTTPException(status_code=502, detail=f"upstream returned {upstream.status_code}")
 
-    print(f"[gateway] {filename} download by {customer}")
+    print(f"[gateway] {filename} download by {customer['name']}")
 
     async def _close():
         await upstream.aclose()
