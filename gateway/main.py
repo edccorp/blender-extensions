@@ -24,6 +24,14 @@ Environment variables:
                                           "products": ["recon_toolkit"]}}
     GH_TOKEN         fine-grained GitHub PAT with Contents:read on the
                      product repos (used to stream private release assets)
+    CUSTOMERS_REPO   optional "owner/repo" of a private repo holding the
+                     customer list as a JSON file. When set, the file is
+                     fetched with GH_TOKEN and re-read within CUSTOMERS_TTL
+                     seconds of any change — add/revoke customers by
+                     editing the file, no redeploy. Entries there override
+                     CUSTOMER_TOKENS, which remains as a bootstrap/fallback.
+    CUSTOMERS_PATH   path of the file in CUSTOMERS_REPO (default customers.json)
+    CUSTOMERS_TTL    customer-list cache seconds (default 60)
     ORIGIN_BASE      Pages origin serving index.json/packages.json
                      (default https://edccorp.github.io/blender-extensions)
     CACHE_TTL        origin cache seconds (default 300)
@@ -43,6 +51,9 @@ ORIGIN_BASE = os.environ.get(
 ).rstrip("/")
 GH_TOKEN = os.environ.get("GH_TOKEN", "")
 CACHE_TTL = int(os.environ.get("CACHE_TTL", "300"))
+CUSTOMERS_REPO = os.environ.get("CUSTOMERS_REPO", "")
+CUSTOMERS_PATH = os.environ.get("CUSTOMERS_PATH", "customers.json")
+CUSTOMERS_TTL = int(os.environ.get("CUSTOMERS_TTL", "60"))
 
 _raw_tokens = os.environ.get("CUSTOMER_TOKENS", "{}")
 try:
@@ -61,6 +72,45 @@ if not CUSTOMER_TOKENS and _raw_tokens.strip() not in ("", "{}"):
 app = FastAPI(title="EDC Software extensions gateway", docs_url=None, redoc_url=None)
 
 _origin_cache: dict[str, tuple[float, bytes]] = {}
+_customers_cache: dict = {"at": 0.0, "data": None, "error": None}
+
+
+async def _customer_tokens() -> dict:
+    """Current token -> customer mapping.
+
+    With CUSTOMERS_REPO set, the JSON file is fetched via the GitHub
+    contents API using GH_TOKEN and cached for CUSTOMERS_TTL seconds; on
+    fetch/parse errors the last good copy keeps serving and the error is
+    surfaced on /healthz. CUSTOMER_TOKENS entries are merged underneath,
+    so the env var still works as a bootstrap or emergency override —
+    though a token revoked in the file stays active if it also lives in
+    the env var, so clear CUSTOMER_TOKENS once you migrate.
+    """
+    if not CUSTOMERS_REPO:
+        return CUSTOMER_TOKENS
+    now = time.time()
+    if _customers_cache["data"] is None or now - _customers_cache["at"] >= CUSTOMERS_TTL:
+        url = f"https://api.github.com/repos/{CUSTOMERS_REPO}/contents/{CUSTOMERS_PATH}"
+        headers = {"Accept": "application/vnd.github.raw+json"}
+        if GH_TOKEN:
+            headers["Authorization"] = f"Bearer {GH_TOKEN}"
+        try:
+            async with httpx.AsyncClient(timeout=15.0) as client:
+                resp = await client.get(url, headers=headers)
+            if resp.status_code != 200:
+                raise RuntimeError(f"GitHub returned {resp.status_code}")
+            data = json.loads(resp.content)
+            if not isinstance(data, dict):
+                raise ValueError("customer file must be a JSON object")
+            _customers_cache.update(data=data, error=None)
+        except Exception as exc:
+            _customers_cache["error"] = (
+                f"customer list fetch failed ({CUSTOMERS_REPO}/{CUSTOMERS_PATH}): {exc}"
+            )
+            print(f"[gateway] ERROR: {_customers_cache['error']}")
+        # Stamp even on failure so a broken origin isn't hit on every request.
+        _customers_cache["at"] = now
+    return {**CUSTOMER_TOKENS, **(_customers_cache["data"] or {})}
 
 
 def _entitlements(raw):
@@ -83,18 +133,19 @@ def _entitled(customer: dict, product_id: str) -> bool:
     return "*" in customer["products"] or product_id in customer["products"]
 
 
-def _authed_customer(request: Request) -> dict | None:
+async def _authed_customer(request: Request) -> dict | None:
     """Return {"name", "products"} for the request's Bearer token, or None."""
     auth = request.headers.get("authorization", "")
     if auth.lower().startswith("bearer "):
-        raw = CUSTOMER_TOKENS.get(auth[7:].strip())
+        tokens = await _customer_tokens()
+        raw = tokens.get(auth[7:].strip())
         if raw is not None:
             return _entitlements(raw)
     return None
 
 
-def _require_customer(request: Request) -> dict:
-    customer = _authed_customer(request)
+async def _require_customer(request: Request) -> dict:
+    customer = await _authed_customer(request)
     if customer is None:
         raise HTTPException(
             status_code=401,
@@ -125,7 +176,13 @@ async def _origin_get(path: str) -> bytes:
 
 @app.get("/healthz")
 async def healthz():
-    body = {"ok": TOKENS_ERROR is None, "tokens_configured": len(CUSTOMER_TOKENS)}
+    tokens = await _customer_tokens()
+    body = {"ok": TOKENS_ERROR is None, "tokens_configured": len(tokens)}
+    if CUSTOMERS_REPO:
+        body["customers_source"] = CUSTOMERS_REPO
+        if _customers_cache["error"]:
+            body["ok"] = False
+            body["customers_error"] = _customers_cache["error"]
     if TOKENS_ERROR:
         body["error"] = TOKENS_ERROR
     return body
@@ -139,7 +196,7 @@ async def landing():
 
 @app.get("/index.json")
 async def index_json(request: Request):
-    customer = _require_customer(request)
+    customer = await _require_customer(request)
     body = await _origin_get("index.json")
     if "*" not in customer["products"]:
         index = json.loads(body)
@@ -153,7 +210,7 @@ async def index_json(request: Request):
 
 @app.get("/packages/{filename}")
 async def package(filename: str, request: Request):
-    customer = _require_customer(request)
+    customer = await _require_customer(request)
     if "/" in filename or ".." in filename:
         raise HTTPException(status_code=404)
 

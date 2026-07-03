@@ -37,6 +37,9 @@ Blender ──token──▶ extensions.edccorp.com (this gateway on Railway)
      Product ids: `cammatch`, `hve_toolkit`, `point_cloud_toolkit`,
      `recon_toolkit` (or `"*"` for all). Generate tokens with:
      `python -c "import secrets; print('edc_' + secrets.token_urlsafe(18))"`
+   - `CUSTOMERS_REPO` (optional, recommended once you have more than a
+     couple of customers) — see **Managing customers at scale** below;
+     tokens then live in a private repo instead of this variable.
 3. **Attach the domain**: service → Settings → Networking → Custom Domain →
    `extensions.edccorp.com`. Railway shows a CNAME target; update the DNS
    record for `extensions` (currently pointing at `edccorp.github.io`) to
@@ -55,18 +58,51 @@ tick **Requires Access Token** → paste the customer's token into
 **Secret**. Everything else (install, update notifications) works as
 before — unauthenticated clients get a 401 with a friendly message.
 
-## Managing tokens
+## Managing customers at scale (recommended)
 
-- **Add a customer**: add an entry to `CUSTOMER_TOKENS` in Railway;
-  the service restarts automatically with the new variable.
-- **Change a customer's products**: edit their `products` list — their
-  Blender's view of the repository updates on its next sync (a newly
-  licensed product simply appears; a removed one stops updating).
-- **Revoke a customer**: remove their entry. Their Blender shows an
-  authentication error on the next sync; installed add-ons keep working.
+Editing `CUSTOMER_TOKENS` in the Railway dashboard is fine for one or two
+tokens, but past that, move the list into a **private GitHub repo**. The
+gateway re-reads the file within a minute of any change — no redeploy —
+and the repo's commit history is a free audit trail of every add, scope
+change, and revocation.
+
+One-time setup:
+
+1. Create a **private** repo `edccorp/edc-customers` (empty is fine).
+2. Add that repo to the fine-grained PAT used as the gateway's `GH_TOKEN`
+   (github.com → Settings → Developer settings → Fine-grained tokens →
+   edit → Repository access). Contents: read is already enough.
+3. In Railway (service → Variables) add `CUSTOMERS_REPO=edccorp/edc-customers`.
+4. For the management CLI, create a **second** fine-grained PAT with
+   **Contents: read & write** on `edc-customers` only, and set it on your
+   machine: `setx CUSTOMERS_ADMIN_TOKEN github_pat_...`
+5. Migrate any tokens out of `CUSTOMER_TOKENS` (re-add them via the CLI),
+   then set `CUSTOMER_TOKENS={}` — entries left there stay active even if
+   revoked in the file, so don't keep both.
+
+Day-to-day, from the repo root:
+
+```
+python tools/customer.py add "Acme Reconstruction LLC"
+python tools/customer.py add "Smith Engineering" --products recon_toolkit,point_cloud_toolkit
+python tools/customer.py list
+python tools/customer.py set-products "Smith Engineering" --products "*"
+python tools/customer.py revoke "Acme Reconstruction LLC"
+```
+
+`add` generates the token, commits the change, and prints the token once
+along with the customer-facing Blender setup steps. Changes go live on
+the gateway within ~60 seconds (`CUSTOMERS_TTL`). You can also edit
+`customers.json` directly on github.com — same format as
+`CUSTOMER_TOKENS`, token → label or `{"name", "products"}` object.
+
+- **Revoke**: their Blender shows an authentication error on the next
+  sync; already-installed add-ons keep working but stop updating.
 - Downloads and index fetches are logged with the customer label
-  (Railway → Deployments → Logs) — a simple audit trail of who is
-  updating.
+  (Railway → Deployments → Logs) — who is updating, and when.
+- If the customers file ever fails to fetch or parse, the gateway keeps
+  serving the **last good copy** and reports the problem at `/healthz`
+  (`"ok": false` + `customers_error`).
 
 ## Notes
 
