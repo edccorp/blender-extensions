@@ -18,7 +18,7 @@ and automatic update notifications for every EDC product.
 3. Paste the repository URL:
 
    ```
-   https://edccorp.github.io/blender-extensions/index.json
+   https://extensions.edccorp.com/index.json
    ```
 
 4. Name it **EDC Software** and confirm.
@@ -62,6 +62,7 @@ this repo from the product's release workflow.
   `tools/build_index.py`.
 - Test locally: `python tools/build_index.py /tmp/site` (set
   `GITHUB_TOKEN` to avoid API rate limits), then open `/tmp/site/index.html`.
-- If a custom domain (e.g. `extensions.edccorp.com`) is added in the
-  Pages settings, update `REPOSITORY_URL` in `tools/build_index.py` and
-  the URL in this README — the old github.io URL keeps redirecting.
+- The site is served at the custom domain `extensions.edccorp.com`
+  (configured in the Pages settings); the underlying
+  `edccorp.github.io/blender-extensions` URL redirects to it. If the
+  domain ever changes, update `PAGES_BASE` in `tools/build_index.py`.

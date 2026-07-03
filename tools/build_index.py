@@ -42,7 +42,7 @@ PRODUCTS = [
     "edccorp/ReconToolkit",
 ]
 
-PAGES_BASE = "https://edccorp.github.io/blender-extensions"
+PAGES_BASE = "https://extensions.edccorp.com"
 REPOSITORY_URL = f"{PAGES_BASE}/index.json"
 
 MIRROR_ZIPS = os.environ.get("MIRROR_ZIPS", "1").lower() not in ("0", "false", "no")
