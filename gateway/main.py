@@ -93,6 +93,11 @@ except json.JSONDecodeError as exc:
     PRICES_ERROR = f"STRIPE_PRICES is not valid JSON: {exc}"
     print(f"[gateway] ERROR: {PRICES_ERROR}")
 PUBLIC_BASE = os.environ.get("PUBLIC_BASE", "https://extensions.edccorp.com").rstrip("/")
+# Products currently offered free: included with every token, and obtainable
+# without payment via /register (name + email -> instant token).
+FREE_PRODUCTS = [
+    p.strip() for p in os.environ.get("FREE_PRODUCTS", "").split(",") if p.strip()
+]
 PRODUCT_IDS = ("cammatch", "hve_toolkit", "point_cloud_toolkit", "recon_toolkit")
 PRODUCT_NAMES = {
     "cammatch": "CamMatch™",
@@ -197,6 +202,8 @@ def _active(expiry) -> bool:
 
 
 def _entitled(customer: dict, product_id: str) -> bool:
+    if product_id in FREE_PRODUCTS:
+        return True  # free products come with every valid token
     products = customer["products"]
     return any(k in products and _active(products[k]) for k in ("*", product_id))
 
@@ -724,6 +731,8 @@ async def _stripe_price(price_id: str) -> dict:
 
 
 def _money(amount: int, currency: str) -> str:
+    if amount == 0:
+        return "Free"
     if currency.lower() == "usd":
         return f"${amount / 100:,.2f}".replace(".00", "")
     return f"{amount / 100:,.2f} {currency.upper()}"
@@ -793,10 +802,10 @@ function total() {{
     cents += +b.dataset.amount; n++;
   }});
   document.getElementById('buy').disabled = n === 0;
-  document.getElementById('sum').textContent = n
-    ? 'Total: $' + (cents / 100).toLocaleString('en-US',
-        {{minimumFractionDigits: cents % 100 ? 2 : 0}})
-    : 'Select products';
+  document.getElementById('sum').textContent = !n ? 'Select products'
+    : cents === 0 ? 'Total: Free'
+    : 'Total: $' + (cents / 100).toLocaleString('en-US',
+        {{minimumFractionDigits: cents % 100 ? 2 : 0}});
 }}
 </script></body></html>""")
 
@@ -805,13 +814,21 @@ function total() {{
 async def checkout(request: Request):
     if not (STRIPE_SECRET_KEY and STRIPE_PRICES):
         raise HTTPException(status_code=503, detail="store is not configured (STRIPE_PRICES)")
-    ids = [p for p in request.query_params.getlist("products") if p in STRIPE_PRICES]
+    ids = [
+        p for p in request.query_params.getlist("products")
+        if p in STRIPE_PRICES or p in FREE_PRODUCTS
+    ]
     ids = list(dict.fromkeys(ids))
     if not ids:
         return RedirectResponse("/store", status_code=303)
+    if all(p in FREE_PRODUCTS for p in ids):
+        # Nothing to pay for — Stripe won't take a $0 checkout anyway.
+        return RedirectResponse(f"/register?products={','.join(ids)}", status_code=303)
+    all_ids = ids
+    ids = [p for p in ids if p in STRIPE_PRICES]
     form: dict[str, str] = {
         "mode": "payment",
-        "metadata[products]": ",".join(ids),
+        "metadata[products]": ",".join(all_ids),
         "success_url": f"{PUBLIC_BASE}/welcome?session_id={{CHECKOUT_SESSION_ID}}",
         "cancel_url": f"{PUBLIC_BASE}/store",
         "allow_promotion_codes": "true",
@@ -832,6 +849,90 @@ async def checkout(request: Request):
         raise HTTPException(status_code=502, detail="could not start checkout — try again shortly")
     print(f"[gateway] store: checkout started for {', '.join(ids)}")
     return RedirectResponse(resp.json()["url"], status_code=303)
+
+
+def _register_form_html(ids: list, error: str = "") -> str:
+    names = ", ".join(PRODUCT_NAMES.get(p, p) for p in ids)
+    err = f'<p style="color:#c0392b"><strong>{html.escape(error)}</strong></p>' if error else ""
+    return f"""<!doctype html>
+<html lang="en"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex">
+<title>Get free access — EDC Software</title>
+<style>
+  :root {{ color-scheme: light dark;
+    --bg: #f6f7f9; --card: #ffffff; --ink: #1c2530; --muted: #5b6773;
+    --accent: #0e5a8a; --border: #e2e6ea; }}
+  @media (prefers-color-scheme: dark) {{
+    :root {{ --bg: #10151b; --card: #1a2129; --ink: #e8edf2;
+      --muted: #9aa7b2; --accent: #6fb3dc; --border: #2a333d; }} }}
+  body {{ margin: 0; background: var(--bg); color: var(--ink);
+    font: 16px/1.6 system-ui, "Segoe UI", sans-serif; }}
+  main {{ max-width: 30rem; margin: 3rem auto; padding: 0 1.25rem; }}
+  .card {{ background: var(--card); border: 1px solid var(--border);
+    border-radius: 12px; padding: 2rem; }}
+  h1 {{ margin: 0 0 .25rem; font-size: 1.4rem; }}
+  .muted {{ color: var(--muted); }}
+  label {{ display: block; margin: 1rem 0 .3rem; font-weight: 600; }}
+  input[type=text], input[type=email] {{ width: 100%; padding: .6rem .8rem;
+    border: 1px solid var(--border); border-radius: 8px; background: var(--bg);
+    color: var(--ink); font-size: 1rem; }}
+  button {{ margin-top: 1.4rem; width: 100%; background: var(--accent); color: #fff;
+    border: 0; border-radius: 8px; padding: .75rem; font-size: 1.05rem;
+    font-weight: 600; cursor: pointer; }}
+</style></head><body><main><div class="card">
+<h1>Get free access</h1>
+<p class="muted">{html.escape(names)} — free from Engineering Dynamics Company.
+Enter your details and your personal access token is created instantly.</p>
+{err}
+<form action="/register" method="get">
+<input type="hidden" name="products" value="{html.escape(','.join(ids))}">
+<label for="name">Name / Company</label>
+<input type="text" id="name" name="name" required>
+<label for="email">Email</label>
+<input type="email" id="email" name="email" required>
+<button type="submit">Create my access token</button>
+</form>
+</div></main></body></html>"""
+
+
+@app.get("/register")
+async def register(request: Request):
+    """Free-product registration: name + email -> instant token, no payment."""
+    if not (ADMIN_GH_TOKEN and CUSTOMERS_REPO and FREE_PRODUCTS):
+        raise HTTPException(status_code=503, detail="free registration is not configured")
+    q = request.query_params
+    ids = [p.strip() for p in q.get("products", "").split(",") if p.strip() in FREE_PRODUCTS]
+    ids = list(dict.fromkeys(ids))
+    if not ids:
+        return RedirectResponse("/store", status_code=303)
+    name = (q.get("name") or "").strip()
+    email = (q.get("email") or "").strip()
+    if not name and not email:
+        return HTMLResponse(_register_form_html(ids))
+    if not name or "@" not in email:
+        return HTMLResponse(_register_form_html(ids, "Please provide a name and a valid email."))
+
+    customers, sha = await _read_customers_file()
+    for token, value in customers.items():
+        if isinstance(value, dict) and value.get("email", "").strip().lower() == email.lower():
+            # Existing customer: free products already come with their token.
+            # Never re-display a token to someone who only proved they can
+            # type an email address.
+            return HTMLResponse(f"""<h1>You're already set up</h1>
+<p>The token you already have (starts with <code>{html.escape(token[:8])}…</code>)
+includes every free EDC product — press the refresh button on the
+extensions.edccorp.com repository in Blender and
+{html.escape(', '.join(PRODUCT_NAMES.get(p, p) for p in ids))} will appear.
+Lost your token? Contact Engineering Dynamics Company.</p>""")
+
+    token = "edc_" + secrets.token_urlsafe(18)
+    customers[token] = {"name": name, "email": email, "products": ids}
+    await _write_customers_file(customers, sha, f"Free registration: {name}")
+    print(f"[gateway] free registration: {name} <{email}> ({', '.join(ids)})")
+    return HTMLResponse(_welcome_html(
+        {"token": token, "name": name, "products": {p: None for p in ids}, "merged": False}
+    ))
 
 
 @app.get("/healthz")

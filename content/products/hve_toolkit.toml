@@ -4,7 +4,7 @@
 name = "HVE Toolkit™"
 tagline = "Simulation & Workflow Tools for Blender"
 badge = "Built for HVE users"
-price = ""
+price = "Free"
 
 pitch = """HVE Toolkit™ connects Blender to Human Vehicle Environment (HVE) \
 simulation workflows. Prepare vehicles and environments for simulation, \
@@ -24,8 +24,8 @@ features = [
 ]
 
 includes = [
-    "Official HVE Toolkit™ software package",
-    "One year of software updates",
+    "Official HVE Toolkit™ software package — free",
+    "Automatic updates through the EDC Software repository",
     "Official documentation",
 ]
 

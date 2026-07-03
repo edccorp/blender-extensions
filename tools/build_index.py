@@ -216,11 +216,14 @@ def load_products_content():
 
 
 def _buy_actions(pid, price, big=False):
-    cls = "btn" if big else "btn"
+    if price and price.strip().lower() == "free":
+        # /checkout sends free-only selections to the /register form.
+        return ('<span class="price">Free</span>\n'
+                f'<a class="btn" href="{PAGES_BASE}/checkout?products={pid}">Get it free</a>')
     if price:
         return (f'<span class="price">{html.escape(price)}</span>\n'
-                f'<a class="{cls}" href="{PAGES_BASE}/checkout?products={pid}">Buy now</a>')
-    return f'<a class="{cls} ghost" href="{STORE_URL}">See the store</a>'
+                f'<a class="btn" href="{PAGES_BASE}/checkout?products={pid}">Buy now</a>')
+    return f'<a class="btn ghost" href="{STORE_URL}">See the store</a>'
 
 
 def render_landing_page(entries, content):

@@ -4,7 +4,7 @@
 name = "Recon Toolkit™"
 tagline = "Accident Reconstruction Tools for Blender"
 badge = "From crash data to animation"
-price = ""
+price = "Free"
 
 pitch = """Recon Toolkit™ turns recorded crash data — EDR reports, motion \
 tables, survey points — into animated Blender scenes, and adds the \
@@ -23,8 +23,8 @@ features = [
 ]
 
 includes = [
-    "Official Recon Toolkit™ software package",
-    "One year of software updates",
+    "Official Recon Toolkit™ software package — free",
+    "Automatic updates through the EDC Software repository",
     "Official documentation",
 ]
 
