@@ -65,7 +65,7 @@ from datetime import date, timedelta
 
 import httpx
 from fastapi import FastAPI, HTTPException, Request
-from fastapi.responses import HTMLResponse, Response, StreamingResponse
+from fastapi.responses import HTMLResponse, RedirectResponse, Response, StreamingResponse
 from starlette.background import BackgroundTask
 
 ORIGIN_BASE = os.environ.get(
@@ -83,12 +83,26 @@ STRIPE_WEBHOOK_SECRET = os.environ.get("STRIPE_WEBHOOK_SECRET", "")
 # Default license term (days of update service) for purchases whose Payment
 # Link has no term_days metadata; empty = perpetual.
 LICENSE_TERM_DAYS = os.environ.get("LICENSE_TERM_DAYS", "")
+# Product id -> Stripe Price id, e.g. {"cammatch": "price_1ABC..."}; enables
+# the /store page where customers pick any combination in one checkout.
+try:
+    STRIPE_PRICES = json.loads(os.environ.get("STRIPE_PRICES", "{}"))
+except json.JSONDecodeError as exc:
+    STRIPE_PRICES = {}
+    print(f"[gateway] ERROR: STRIPE_PRICES is not valid JSON: {exc}")
+PUBLIC_BASE = os.environ.get("PUBLIC_BASE", "https://extensions.edccorp.com").rstrip("/")
 PRODUCT_IDS = ("cammatch", "hve_toolkit", "point_cloud_toolkit", "recon_toolkit")
 PRODUCT_NAMES = {
     "cammatch": "CamMatch™",
     "hve_toolkit": "HVE Toolkit™",
     "point_cloud_toolkit": "Point Cloud Toolkit™",
     "recon_toolkit": "Recon Toolkit™",
+}
+PRODUCT_TAGLINES = {
+    "cammatch": "Camera matching from 2D-3D correspondences",
+    "hve_toolkit": "Pre- and post-simulation tools for HVE",
+    "point_cloud_toolkit": "Import, filter, and surface laser-scan point clouds",
+    "recon_toolkit": "Data-driven animation and analysis for accident recon",
 }
 
 _raw_tokens = os.environ.get("CUSTOMER_TOKENS", "{}")
@@ -679,6 +693,141 @@ async def stripe_webhook(request: Request):
             if not result["already_processed"]:
                 print(f"[gateway] stripe: webhook provisioned session {obj['id']}")
     return {"received": True}
+
+
+# --------------------------------------------------------------------------
+# Store: pick any combination of products, one Stripe Checkout for the lot.
+
+_price_cache: dict[str, tuple[float, dict]] = {}
+
+
+async def _stripe_price(price_id: str) -> dict:
+    """Amount/currency for a Stripe Price, cached for an hour."""
+    hit = _price_cache.get(price_id)
+    if hit is not None and time.time() - hit[0] < 3600:
+        return hit[1]
+    async with httpx.AsyncClient(timeout=30.0) as client:
+        resp = await client.get(
+            f"https://api.stripe.com/v1/prices/{price_id}",
+            headers={"Authorization": f"Bearer {STRIPE_SECRET_KEY}"},
+        )
+    if resp.status_code != 200:
+        raise HTTPException(status_code=502, detail=f"Stripe returned {resp.status_code} for {price_id}")
+    price = resp.json()
+    info = {"amount": price.get("unit_amount") or 0, "currency": price.get("currency", "usd")}
+    _price_cache[price_id] = (time.time(), info)
+    return info
+
+
+def _money(amount: int, currency: str) -> str:
+    if currency.lower() == "usd":
+        return f"${amount / 100:,.2f}".replace(".00", "")
+    return f"{amount / 100:,.2f} {currency.upper()}"
+
+
+@app.get("/store")
+async def store():
+    if not (STRIPE_SECRET_KEY and STRIPE_PRICES):
+        raise HTTPException(status_code=503, detail="store is not configured (STRIPE_PRICES)")
+    rows = ""
+    for pid in PRODUCT_IDS:
+        if pid not in STRIPE_PRICES:
+            continue
+        price = await _stripe_price(STRIPE_PRICES[pid])
+        rows += f"""
+<label class="row"><input type="checkbox" name="products" value="{pid}"
+  data-amount="{price['amount']}" onchange="total()">
+<span><b>{html.escape(PRODUCT_NAMES[pid])}</b><br>
+<span class="muted">{html.escape(PRODUCT_TAGLINES[pid])}</span></span>
+<span class="price">{html.escape(_money(price['amount'], price['currency']))}</span></label>"""
+    return HTMLResponse(f"""<!doctype html>
+<html lang="en"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Store — EDC Software</title>
+<style>
+  :root {{ color-scheme: light dark;
+    --bg: #f6f7f9; --card: #ffffff; --ink: #1c2530; --muted: #5b6773;
+    --accent: #0e5a8a; --border: #e2e6ea; }}
+  @media (prefers-color-scheme: dark) {{
+    :root {{ --bg: #10151b; --card: #1a2129; --ink: #e8edf2;
+      --muted: #9aa7b2; --accent: #6fb3dc; --border: #2a333d; }} }}
+  body {{ margin: 0; background: var(--bg); color: var(--ink);
+    font: 16px/1.6 system-ui, "Segoe UI", sans-serif; }}
+  main {{ max-width: 40rem; margin: 3rem auto; padding: 0 1.25rem; }}
+  .card {{ background: var(--card); border: 1px solid var(--border);
+    border-radius: 12px; padding: 2rem; }}
+  h1 {{ margin: 0 0 .25rem; font-size: 1.5rem; }}
+  .muted {{ color: var(--muted); }}
+  .row {{ display: flex; gap: .9rem; align-items: center; padding: .9rem 0;
+    border-bottom: 1px solid var(--border); cursor: pointer; }}
+  .row input {{ width: 1.15rem; height: 1.15rem; accent-color: var(--accent); }}
+  .row .price {{ margin-left: auto; font-weight: 600; white-space: nowrap; }}
+  .foot {{ display: flex; align-items: center; margin-top: 1.25rem; }}
+  #sum {{ font-size: 1.15rem; font-weight: 700; }}
+  button {{ margin-left: auto; background: var(--accent); color: #fff;
+    border: 0; border-radius: 8px; padding: .7rem 1.6rem; font-size: 1rem;
+    cursor: pointer; }}
+  button:disabled {{ opacity: .45; cursor: default; }}
+  a {{ color: var(--accent); }}
+</style></head><body><main><div class="card">
+<h1>EDC Software — Store</h1>
+<p class="muted">Blender add-ons by Engineering Dynamics Company.
+Pick any combination — one checkout, one license token for all of it.
+Already a customer? Buy with the same email and your existing token is
+upgraded automatically.</p>
+<form action="/checkout" method="get">
+{rows}
+<div class="foot"><span id="sum">Select products</span>
+<button type="submit" id="buy" disabled>Checkout</button></div>
+</form>
+<p class="muted"><a href="/">&larr; Back to products</a></p>
+</div></main>
+<script>
+function total() {{
+  let cents = 0, n = 0;
+  document.querySelectorAll('input[name=products]:checked').forEach(b => {{
+    cents += +b.dataset.amount; n++;
+  }});
+  document.getElementById('buy').disabled = n === 0;
+  document.getElementById('sum').textContent = n
+    ? 'Total: $' + (cents / 100).toLocaleString('en-US',
+        {{minimumFractionDigits: cents % 100 ? 2 : 0}})
+    : 'Select products';
+}}
+</script></body></html>""")
+
+
+@app.get("/checkout")
+async def checkout(request: Request):
+    if not (STRIPE_SECRET_KEY and STRIPE_PRICES):
+        raise HTTPException(status_code=503, detail="store is not configured (STRIPE_PRICES)")
+    ids = [p for p in request.query_params.getlist("products") if p in STRIPE_PRICES]
+    ids = list(dict.fromkeys(ids))
+    if not ids:
+        return RedirectResponse("/store", status_code=303)
+    form: dict[str, str] = {
+        "mode": "payment",
+        "metadata[products]": ",".join(ids),
+        "success_url": f"{PUBLIC_BASE}/welcome?session_id={{CHECKOUT_SESSION_ID}}",
+        "cancel_url": f"{PUBLIC_BASE}/store",
+        "allow_promotion_codes": "true",
+    }
+    if LICENSE_TERM_DAYS.strip():
+        form["metadata[term_days]"] = LICENSE_TERM_DAYS.strip()
+    for i, pid in enumerate(ids):
+        form[f"line_items[{i}][price]"] = STRIPE_PRICES[pid]
+        form[f"line_items[{i}][quantity]"] = "1"
+    async with httpx.AsyncClient(timeout=30.0) as client:
+        resp = await client.post(
+            "https://api.stripe.com/v1/checkout/sessions",
+            data=form,
+            headers={"Authorization": f"Bearer {STRIPE_SECRET_KEY}"},
+        )
+    if resp.status_code != 200:
+        print(f"[gateway] ERROR: checkout session creation failed: {resp.status_code} {resp.text[:300]}")
+        raise HTTPException(status_code=502, detail="could not start checkout — try again shortly")
+    print(f"[gateway] store: checkout started for {', '.join(ids)}")
+    return RedirectResponse(resp.json()["url"], status_code=303)
 
 
 @app.get("/healthz")

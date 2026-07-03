@@ -158,6 +158,31 @@ different email means a fresh customer entry — if someone buys twice
 under two emails, merge by hand: `set-products` on the entry to keep,
 `revoke` the other.
 
+## The store page (any combination, one checkout)
+
+`https://extensions.edccorp.com/store` lets a customer tick any set of
+products and pay for them in a single Stripe Checkout — the gateway
+creates the checkout session itself with the right `products` metadata,
+so the purchase flows through the same welcome/token/merge logic as the
+payment links. Promotion codes are enabled at checkout. To turn it on:
+
+1. Railway → Variables: `STRIPE_PRICES` — JSON mapping product id to the
+   Stripe **Price id** (Product catalog → product → price → `price_...`):
+   ```json
+   {"cammatch": "price_1ABC...", "hve_toolkit": "price_1DEF...",
+    "point_cloud_toolkit": "price_1GHI...", "recon_toolkit": "price_1JKL..."}
+   ```
+   Products missing from the map simply don't appear in the store.
+2. The gateway's `STRIPE_SECRET_KEY` must be allowed to **create**
+   checkout sessions — if you used a restricted key, give it Checkout
+   Sessions: Write and Prices: Read on top of the read permissions.
+3. Prices display straight from Stripe (cached an hour), so a price
+   change in the dashboard is the only edit you ever make.
+
+`LICENSE_TERM_DAYS` (if set) is stamped on store checkouts as the term,
+same as `term_days` metadata on payment links. Individual payment links
+keep working alongside the store.
+
 ## Time-limited licenses (one year of updates)
 
 To sell "the add-on plus N days of updates", add a second metadata key
