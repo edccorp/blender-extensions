@@ -57,6 +57,34 @@ def api(method: str = "GET", payload: dict | None = None):
     return urllib.request.urlopen(request, data)
 
 
+def github_message(exc: urllib.error.HTTPError) -> str:
+    try:
+        return json.load(exc).get("message", "")
+    except Exception:
+        return ""
+
+
+def explain_http_error(exc: urllib.error.HTTPError, writing: bool) -> None:
+    detail = github_message(exc)
+    hints = {
+        401: "GitHub rejected CUSTOMERS_ADMIN_TOKEN — the PAT is invalid or expired",
+        403: (
+            "the PAT is not allowed to write here. On the fine-grained PAT page, "
+            "set Repository permissions > Contents to 'Read and write', make sure "
+            f"{REPO} is in the token's repository list, and click Update"
+        ),
+        404: (
+            f"GitHub can't see {REPO} with this PAT — check the repo exists with "
+            "exactly that name and is in the token's repository list"
+        ),
+        409: "the file changed on GitHub while this command ran — just re-run it",
+    }
+    hint = hints.get(exc.code, "")
+    suffix = f" (GitHub says: {detail})" if detail else ""
+    die(f"HTTP {exc.code} {'writing' if writing else 'reading'} "
+        f"{REPO}/{PATH}: {hint or 'unexpected error'}{suffix}")
+
+
 def fetch() -> tuple[dict, str | None]:
     """Return (customers, file sha). Missing file -> ({}, None)."""
     try:
@@ -64,10 +92,10 @@ def fetch() -> tuple[dict, str | None]:
             body = json.load(resp)
     except urllib.error.HTTPError as exc:
         if exc.code == 404:
-            return {}, None  # repo exists but file not created yet
-        if exc.code == 401:
-            die("GitHub rejected CUSTOMERS_ADMIN_TOKEN (401) — check the PAT")
-        die(f"GitHub returned {exc.code} for {API_URL}")
+            # Missing file and PAT-can't-see-repo both 404 here; assume the
+            # former (first run) — a bad PAT then fails loudly on the write.
+            return {}, None
+        explain_http_error(exc, writing=False)
     customers = json.loads(base64.b64decode(body["content"]))
     if not isinstance(customers, dict):
         die(f"{PATH} in {REPO} is not a JSON object")
@@ -83,8 +111,11 @@ def save(customers: dict, sha: str | None, message: str) -> None:
     }
     if sha:
         payload["sha"] = sha
-    with api("PUT", payload):
-        pass
+    try:
+        with api("PUT", payload):
+            pass
+    except urllib.error.HTTPError as exc:
+        explain_http_error(exc, writing=True)
 
 
 def name_of(value) -> str:
