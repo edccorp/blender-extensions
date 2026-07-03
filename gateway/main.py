@@ -32,13 +32,21 @@ Environment variables:
                      CUSTOMER_TOKENS, which remains as a bootstrap/fallback.
     CUSTOMERS_PATH   path of the file in CUSTOMERS_REPO (default customers.json)
     CUSTOMERS_TTL    customer-list cache seconds (default 60)
+    ADMIN_API_TOKEN  enables POST /admin/customers (used by the purchase
+                     automation, e.g. Power Automate) when set; callers
+                     must send it as a Bearer token
+    ADMIN_GH_TOKEN   fine-grained PAT with Contents:read&write on
+                     CUSTOMERS_REPO, used by /admin/customers to commit
+                     new customers (keep GH_TOKEN itself read-only)
     ORIGIN_BASE      Pages origin serving index.json/packages.json
                      (default https://edccorp.github.io/blender-extensions)
     CACHE_TTL        origin cache seconds (default 300)
 """
 
+import base64
 import json
 import os
+import secrets
 import time
 
 import httpx
@@ -54,6 +62,9 @@ CACHE_TTL = int(os.environ.get("CACHE_TTL", "300"))
 CUSTOMERS_REPO = os.environ.get("CUSTOMERS_REPO", "")
 CUSTOMERS_PATH = os.environ.get("CUSTOMERS_PATH", "customers.json")
 CUSTOMERS_TTL = int(os.environ.get("CUSTOMERS_TTL", "60"))
+ADMIN_API_TOKEN = os.environ.get("ADMIN_API_TOKEN", "")
+ADMIN_GH_TOKEN = os.environ.get("ADMIN_GH_TOKEN", "")
+PRODUCT_IDS = ("cammatch", "hve_toolkit", "point_cloud_toolkit", "recon_toolkit")
 
 _raw_tokens = os.environ.get("CUSTOMER_TOKENS", "{}")
 try:
@@ -172,6 +183,116 @@ async def _origin_get(path: str) -> bytes:
         raise HTTPException(status_code=502, detail=f"origin returned {resp.status_code} for {path}")
     _origin_cache[path] = (now, resp.content)
     return resp.content
+
+
+async def _customers_file_request(method: str, payload: dict | None = None) -> httpx.Response:
+    """Read or write the customer file in CUSTOMERS_REPO via the contents API."""
+    url = f"https://api.github.com/repos/{CUSTOMERS_REPO}/contents/{CUSTOMERS_PATH}"
+    headers = {
+        "Accept": "application/vnd.github+json",
+        "Authorization": f"Bearer {ADMIN_GH_TOKEN}",
+    }
+    async with httpx.AsyncClient(timeout=30.0) as client:
+        return await client.request(method, url, headers=headers, json=payload)
+
+
+@app.post("/admin/customers")
+async def admin_add_customer(request: Request):
+    """Provision a customer: generate a token and commit it to CUSTOMERS_REPO.
+
+    Called by the purchase automation (Power Automate) after payment is
+    approved. Body: {"name": "Acme LLC", "email": "buyer@acme.com",
+    "products": ["recon_toolkit"]} — email optional, products optional
+    (omitted/empty/"*" = all). Retry-safe: a name that already exists
+    returns the existing entry instead of minting a duplicate token.
+    """
+    if not (ADMIN_API_TOKEN and ADMIN_GH_TOKEN and CUSTOMERS_REPO):
+        raise HTTPException(
+            status_code=503,
+            detail="admin API not configured (ADMIN_API_TOKEN, ADMIN_GH_TOKEN, CUSTOMERS_REPO)",
+        )
+    auth = request.headers.get("authorization", "")
+    if not (
+        auth.lower().startswith("bearer ")
+        and secrets.compare_digest(auth[7:].strip(), ADMIN_API_TOKEN)
+    ):
+        raise HTTPException(status_code=401, detail="admin token required")
+
+    try:
+        body = await request.json()
+        assert isinstance(body, dict)
+    except Exception:
+        raise HTTPException(status_code=400, detail="a JSON object body is required")
+    name = str(body.get("name") or "").strip()
+    if not name:
+        raise HTTPException(status_code=400, detail="'name' is required")
+    email = str(body.get("email") or "").strip()
+    products = body.get("products") or []
+    if isinstance(products, str):
+        products = [p.strip() for p in products.split(",") if p.strip()]
+    unknown = [p for p in products if p not in PRODUCT_IDS and p != "*"]
+    if unknown:
+        raise HTTPException(
+            status_code=400,
+            detail=f"unknown product ids {unknown}; valid: {', '.join(PRODUCT_IDS)} or *",
+        )
+    if "*" in products:
+        products = []
+
+    resp = await _customers_file_request("GET")
+    if resp.status_code == 200:
+        payload = resp.json()
+        customers = json.loads(base64.b64decode(payload["content"]))
+        sha = payload.get("sha")
+    elif resp.status_code == 404:
+        customers, sha = {}, None  # first customer creates the file
+    else:
+        raise HTTPException(
+            status_code=502, detail=f"GitHub returned {resp.status_code} reading the customer file"
+        )
+
+    for existing_token, value in customers.items():
+        entry = _entitlements(value)
+        if entry and entry["name"].lower() == name.lower():
+            print(f"[gateway] admin: {name} already exists, returning existing entry")
+            return {
+                "token": existing_token,
+                "name": entry["name"],
+                "products": entry["products"],
+                "repository_url": "https://extensions.edccorp.com/index.json",
+                "existing": True,
+            }
+
+    token = "edc_" + secrets.token_urlsafe(18)
+    if email or products:
+        customers[token] = {"name": name, "products": products or ["*"]}
+        if email:
+            customers[token]["email"] = email
+    else:
+        customers[token] = name
+    put_payload = {
+        "message": f"Add customer: {name}",
+        "content": base64.b64encode(
+            (json.dumps(customers, indent=2, sort_keys=True) + "\n").encode()
+        ).decode(),
+    }
+    if sha:
+        put_payload["sha"] = sha
+    resp = await _customers_file_request("PUT", put_payload)
+    if resp.status_code not in (200, 201):
+        raise HTTPException(
+            status_code=502, detail=f"GitHub returned {resp.status_code} writing the customer file"
+        )
+
+    _customers_cache["at"] = 0.0  # token must work on the customer's first sync
+    print(f"[gateway] admin: added customer {name} ({', '.join(products) or 'all products'})")
+    return {
+        "token": token,
+        "name": name,
+        "products": products or ["*"],
+        "repository_url": "https://extensions.edccorp.com/index.json",
+        "existing": False,
+    }
 
 
 @app.get("/healthz")

@@ -104,6 +104,57 @@ the gateway within ~60 seconds (`CUSTOMERS_TTL`). You can also edit
   serving the **last good copy** and reports the problem at `/healthz`
   (`"ok": false` + `customers_error`).
 
+## Selling through a purchase page (Microsoft Forms + Power Automate)
+
+The gateway has a provisioning API so a purchase can turn into a working
+token without touching the CLI:
+
+```
+POST https://extensions.edccorp.com/admin/customers
+Authorization: Bearer <ADMIN_API_TOKEN>
+Content-Type: application/json
+
+{"name": "Acme LLC", "email": "buyer@acme.com", "products": ["recon_toolkit"]}
+```
+
+Response: `{"token": "edc_...", "name", "products", "repository_url",
+"existing"}`. Products may be a list or comma-separated string; omit for
+all products. Retry-safe — re-posting the same name returns the existing
+entry instead of minting a duplicate.
+
+One-time setup:
+
+1. Railway → Variables: add `ADMIN_API_TOKEN` (generate like a customer
+   token: `python -c "import secrets; print('adm_' + secrets.token_urlsafe(24))"`)
+   and `ADMIN_GH_TOKEN` (a fine-grained PAT with **Contents: read & write**
+   on the customers repo — same scope as the CLI's `CUSTOMERS_ADMIN_TOKEN`;
+   keep `GH_TOKEN` itself read-only).
+2. **Microsoft Form** with fields: Name / Company, Email, Product
+   (choice: CamMatch, HVE Toolkit, Point Cloud Toolkit, Recon Toolkit,
+   All), and show the payment link in the form description.
+3. **Power Automate flow**:
+   - Trigger: *When a new response is submitted* → *Get response details*.
+   - *Start and wait for an approval* addressed to you ("Payment received
+     from …?") — payment links don't notify the flow, so this approval
+     is the payment check; approve from the phone app after the payment
+     notification arrives.
+   - *Condition*: outcome is Approve.
+   - *HTTP* action (premium connector): POST to the URL above,
+     `Authorization` header `Bearer <ADMIN_API_TOKEN>`, JSON body mapping
+     the form fields; map the product choice to ids `cammatch`,
+     `hve_toolkit`, `point_cloud_toolkit`, `recon_toolkit`, or `*`.
+   - *Parse JSON* on the response, then *Send an email (V2)* to the
+     customer containing `token` and the Blender steps (add repository
+     `https://extensions.edccorp.com/index.json`, tick *Requires Access
+     Token*, paste the token into *Secret*).
+
+Notes: the HTTP action needs a Power Automate premium license; if that's
+a blocker, skip the HTTP step and run `tools/customer.py add` yourself —
+the approval email still gives you a queue. For fully hands-off sales
+(payment-verified, no approval tap), switch the payment link to Stripe
+Payment Links and point a Stripe webhook at the gateway — say the word
+and that endpoint can be added.
+
 ## Notes
 
 - The Pages origin still serves `index.json`/`packages.json` publicly at
