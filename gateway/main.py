@@ -87,9 +87,11 @@ LICENSE_TERM_DAYS = os.environ.get("LICENSE_TERM_DAYS", "")
 # the /store page where customers pick any combination in one checkout.
 try:
     STRIPE_PRICES = json.loads(os.environ.get("STRIPE_PRICES", "{}"))
+    PRICES_ERROR = None
 except json.JSONDecodeError as exc:
     STRIPE_PRICES = {}
-    print(f"[gateway] ERROR: STRIPE_PRICES is not valid JSON: {exc}")
+    PRICES_ERROR = f"STRIPE_PRICES is not valid JSON: {exc}"
+    print(f"[gateway] ERROR: {PRICES_ERROR}")
 PUBLIC_BASE = os.environ.get("PUBLIC_BASE", "https://extensions.edccorp.com").rstrip("/")
 PRODUCT_IDS = ("cammatch", "hve_toolkit", "point_cloud_toolkit", "recon_toolkit")
 PRODUCT_NAMES = {
@@ -833,7 +835,14 @@ async def checkout(request: Request):
 @app.get("/healthz")
 async def healthz():
     tokens = await _customer_tokens()
-    body = {"ok": TOKENS_ERROR is None, "tokens_configured": len(tokens)}
+    body = {
+        "ok": TOKENS_ERROR is None and PRICES_ERROR is None,
+        "tokens_configured": len(tokens),
+        "store_products": len(STRIPE_PRICES),
+        "stripe_key": bool(STRIPE_SECRET_KEY),
+    }
+    if PRICES_ERROR:
+        body["store_error"] = PRICES_ERROR
     if CUSTOMERS_REPO:
         body["customers_source"] = CUSTOMERS_REPO
         if _customers_cache["error"]:
