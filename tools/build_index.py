@@ -226,9 +226,15 @@ def _buy_actions(pid, price, big=False):
     return f'<a class="btn ghost" href="{STORE_URL}">See the store</a>'
 
 
+DISPLAY_ORDER = ["cammatch", "point_cloud_toolkit", "recon_toolkit", "hve_toolkit"]
+
+
 def render_landing_page(entries, content):
+    def order(e):
+        return DISPLAY_ORDER.index(e["id"]) if e["id"] in DISPLAY_ORDER else len(DISPLAY_ORDER)
+
     cards = []
-    for e in entries:
+    for e in sorted(entries, key=order):
         pid = e["id"]
         c = content.get(pid, {})
         learn = (f'<a href="products/{pid}.html">Learn more \u2192</a>'

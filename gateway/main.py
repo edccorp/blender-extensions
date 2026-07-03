@@ -98,7 +98,8 @@ PUBLIC_BASE = os.environ.get("PUBLIC_BASE", "https://extensions.edccorp.com").rs
 FREE_PRODUCTS = [
     p.strip() for p in os.environ.get("FREE_PRODUCTS", "").split(",") if p.strip()
 ]
-PRODUCT_IDS = ("cammatch", "hve_toolkit", "point_cloud_toolkit", "recon_toolkit")
+# Display order (store rows, welcome-page listings).
+PRODUCT_IDS = ("cammatch", "point_cloud_toolkit", "recon_toolkit", "hve_toolkit")
 PRODUCT_NAMES = {
     "cammatch": "CamMatch™",
     "hve_toolkit": "HVE Toolkit™",
