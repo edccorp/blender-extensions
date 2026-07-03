@@ -30,11 +30,8 @@ features = [
 includes = [
     "Official CamMatch™ Professional software package",
     "One year of software updates",
-    "One seat in the CamMatch™ Professional Certification Program",
-    "Live virtual instructor-led certification training",
-    "Practice Blender projects and datasets",
     "Official documentation",
-    "CamMatch™ Professional Certificate upon successful completion",
+    "Instant delivery — your license token arrives the moment you purchase",
 ]
 
 requirements = [
@@ -43,20 +40,20 @@ requirements = [
 ]
 
 [[sections]]
-title = "Professional Certification"
+title = "Professional Certification (offered separately)"
 body = """The CamMatch™ Professional Certification Program teaches the \
 complete camera matching workflow inside Blender, including 2D image \
 markers, 3D control points, object linking, camera calibration, camera pose \
 solving, reprojection error analysis, diagnostic visualization, and best \
-practices for forensic visualization.
+practices for forensic visualization — live, virtual, and instructor-led, \
+with practice Blender projects and datasets, and an official CamMatch™ \
+Professional Certificate upon successful completion.
 
-Your purchase includes one seat in the certification program. Sessions are \
-scheduled periodically by Engineering Dynamics Company based on demand, \
-with class sizes intentionally limited for personalized instruction and \
-interactive Q&A.
-
-First certification session: July 27–28, 2026, 12:00 PM – 5:00 PM Eastern \
-Time (US). Seats are limited — reserve your place early."""
+Certification sessions are scheduled periodically by Engineering Dynamics \
+Company based on demand, with class sizes intentionally limited for \
+personalized instruction and interactive Q&A. The first session runs \
+July 27–28, 2026, 12:00 PM – 5:00 PM Eastern Time (US) — seats are \
+limited. Contact info@edccorp.com to reserve a seat."""
 
 [[sections]]
 title = "Built for Professionals"
