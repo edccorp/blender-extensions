@@ -36,14 +36,27 @@ Environment variables:
                      automation, e.g. Power Automate) when set; callers
                      must send it as a Bearer token
     ADMIN_GH_TOKEN   fine-grained PAT with Contents:read&write on
-                     CUSTOMERS_REPO, used by /admin/customers to commit
-                     new customers (keep GH_TOKEN itself read-only)
+                     CUSTOMERS_REPO, used by /admin/customers and the
+                     Stripe purchase flow to commit new customers (keep
+                     GH_TOKEN itself read-only)
+    STRIPE_SECRET_KEY    Stripe API key (a restricted key with read on
+                     Checkout Sessions + Products is enough) — enables
+                     GET /welcome, the post-payment page that provisions
+                     the buyer's token and shows it on screen
+    STRIPE_WEBHOOK_SECRET  signing secret (whsec_...) of a Stripe webhook
+                     pointed at POST /webhook/stripe for
+                     checkout.session.completed — a backstop that
+                     provisions the purchase even if the buyer never
+                     reaches /welcome
     ORIGIN_BASE      Pages origin serving index.json/packages.json
                      (default https://edccorp.github.io/blender-extensions)
     CACHE_TTL        origin cache seconds (default 300)
 """
 
 import base64
+import hashlib
+import hmac
+import html
 import json
 import os
 import secrets
@@ -51,7 +64,7 @@ import time
 
 import httpx
 from fastapi import FastAPI, HTTPException, Request
-from fastapi.responses import Response, StreamingResponse
+from fastapi.responses import HTMLResponse, Response, StreamingResponse
 from starlette.background import BackgroundTask
 
 ORIGIN_BASE = os.environ.get(
@@ -64,7 +77,15 @@ CUSTOMERS_PATH = os.environ.get("CUSTOMERS_PATH", "customers.json")
 CUSTOMERS_TTL = int(os.environ.get("CUSTOMERS_TTL", "60"))
 ADMIN_API_TOKEN = os.environ.get("ADMIN_API_TOKEN", "")
 ADMIN_GH_TOKEN = os.environ.get("ADMIN_GH_TOKEN", "")
+STRIPE_SECRET_KEY = os.environ.get("STRIPE_SECRET_KEY", "")
+STRIPE_WEBHOOK_SECRET = os.environ.get("STRIPE_WEBHOOK_SECRET", "")
 PRODUCT_IDS = ("cammatch", "hve_toolkit", "point_cloud_toolkit", "recon_toolkit")
+PRODUCT_NAMES = {
+    "cammatch": "CamMatch™",
+    "hve_toolkit": "HVE Toolkit™",
+    "point_cloud_toolkit": "Point Cloud Toolkit™",
+    "recon_toolkit": "Recon Toolkit™",
+}
 
 _raw_tokens = os.environ.get("CUSTOMER_TOKENS", "{}")
 try:
@@ -196,6 +217,36 @@ async def _customers_file_request(method: str, payload: dict | None = None) -> h
         return await client.request(method, url, headers=headers, json=payload)
 
 
+async def _read_customers_file() -> tuple[dict, str | None]:
+    """Return (customers, file sha); a missing file is an empty list."""
+    resp = await _customers_file_request("GET")
+    if resp.status_code == 200:
+        payload = resp.json()
+        return json.loads(base64.b64decode(payload["content"])), payload.get("sha")
+    if resp.status_code == 404:
+        return {}, None
+    raise HTTPException(
+        status_code=502, detail=f"GitHub returned {resp.status_code} reading the customer file"
+    )
+
+
+async def _write_customers_file(customers: dict, sha: str | None, message: str) -> None:
+    payload = {
+        "message": message,
+        "content": base64.b64encode(
+            (json.dumps(customers, indent=2, sort_keys=True) + "\n").encode()
+        ).decode(),
+    }
+    if sha:
+        payload["sha"] = sha
+    resp = await _customers_file_request("PUT", payload)
+    if resp.status_code not in (200, 201):
+        raise HTTPException(
+            status_code=502, detail=f"GitHub returned {resp.status_code} writing the customer file"
+        )
+    _customers_cache["at"] = 0.0  # the new token must work on the very next sync
+
+
 @app.post("/admin/customers")
 async def admin_add_customer(request: Request):
     """Provision a customer: generate a token and commit it to CUSTOMERS_REPO.
@@ -239,17 +290,7 @@ async def admin_add_customer(request: Request):
     if "*" in products:
         products = []
 
-    resp = await _customers_file_request("GET")
-    if resp.status_code == 200:
-        payload = resp.json()
-        customers = json.loads(base64.b64decode(payload["content"]))
-        sha = payload.get("sha")
-    elif resp.status_code == 404:
-        customers, sha = {}, None  # first customer creates the file
-    else:
-        raise HTTPException(
-            status_code=502, detail=f"GitHub returned {resp.status_code} reading the customer file"
-        )
+    customers, sha = await _read_customers_file()
 
     for existing_token, value in customers.items():
         entry = _entitlements(value)
@@ -270,21 +311,7 @@ async def admin_add_customer(request: Request):
             customers[token]["email"] = email
     else:
         customers[token] = name
-    put_payload = {
-        "message": f"Add customer: {name}",
-        "content": base64.b64encode(
-            (json.dumps(customers, indent=2, sort_keys=True) + "\n").encode()
-        ).decode(),
-    }
-    if sha:
-        put_payload["sha"] = sha
-    resp = await _customers_file_request("PUT", put_payload)
-    if resp.status_code not in (200, 201):
-        raise HTTPException(
-            status_code=502, detail=f"GitHub returned {resp.status_code} writing the customer file"
-        )
-
-    _customers_cache["at"] = 0.0  # token must work on the customer's first sync
+    await _write_customers_file(customers, sha, f"Add customer: {name}")
     print(f"[gateway] admin: added customer {name} ({', '.join(products) or 'all products'})")
     return {
         "token": token,
@@ -293,6 +320,188 @@ async def admin_add_customer(request: Request):
         "repository_url": "https://extensions.edccorp.com/index.json",
         "existing": False,
     }
+
+
+# --------------------------------------------------------------------------
+# Stripe purchase flow: Payment Link -> /welcome (token on screen), with
+# /webhook/stripe as a backstop if the buyer never reaches the redirect.
+
+async def _stripe_checkout_session(session_id: str) -> dict:
+    """Fetch a checkout session, with line-item products expanded."""
+    if not session_id.startswith("cs_"):
+        raise HTTPException(status_code=404, detail="unknown checkout session")
+    async with httpx.AsyncClient(timeout=30.0) as client:
+        resp = await client.get(
+            f"https://api.stripe.com/v1/checkout/sessions/{session_id}",
+            params=[("expand[]", "line_items.data.price.product")],
+            headers={"Authorization": f"Bearer {STRIPE_SECRET_KEY}"},
+        )
+    if resp.status_code == 404:
+        raise HTTPException(status_code=404, detail="unknown checkout session")
+    if resp.status_code != 200:
+        raise HTTPException(status_code=502, detail=f"Stripe returned {resp.status_code}")
+    return resp.json()
+
+
+def _session_products(session: dict) -> list[str]:
+    """Product ids for a purchase ([] = all products).
+
+    Read from the checkout session's metadata (Payment Link metadata is
+    copied there — set `products` on each link), falling back to a
+    `products` metadata key on the Stripe Products themselves.
+    """
+    raw = (session.get("metadata") or {}).get("products", "")
+    ids = [p.strip() for p in raw.split(",") if p.strip()]
+    if not ids:
+        for item in ((session.get("line_items") or {}).get("data") or []):
+            product = (item.get("price") or {}).get("product") or {}
+            if isinstance(product, dict):
+                raw = (product.get("metadata") or {}).get("products", "")
+                ids += [p.strip() for p in raw.split(",") if p.strip()]
+    ids = list(dict.fromkeys(ids))
+    if "*" in ids:
+        return []
+    unknown = [p for p in ids if p not in PRODUCT_IDS]
+    if not ids or unknown:
+        print(
+            f"[gateway] ERROR: session {session.get('id')} has "
+            f"{'unknown product ids ' + str(unknown) if unknown else 'no product metadata'} "
+            "— set a 'products' metadata key on the Payment Link or Product in Stripe"
+        )
+        raise HTTPException(
+            status_code=500,
+            detail=(
+                "This purchase is missing product information. Your payment went "
+                "through — contact Engineering Dynamics Company and your access "
+                "will be set up right away."
+            ),
+        )
+    return ids
+
+
+async def _provision_purchase(session: dict) -> dict:
+    """Create (or return the already-created) customer for a paid session."""
+    details = session.get("customer_details") or {}
+    email = details.get("email") or ""
+    name = details.get("name") or email or "Unknown customer"
+    session_id = session["id"]
+
+    customers, sha = await _read_customers_file()
+    for token, value in customers.items():
+        if isinstance(value, dict) and value.get("stripe_session") == session_id:
+            entry = _entitlements(value)
+            return {"token": token, "name": entry["name"], "products": entry["products"], "existing": True}
+
+    products = _session_products(session)
+    token = "edc_" + secrets.token_urlsafe(18)
+    entry = {"name": name, "products": products or ["*"], "stripe_session": session_id}
+    if email:
+        entry["email"] = email
+    customers[token] = entry
+    await _write_customers_file(customers, sha, f"Add customer: {name} (Stripe purchase)")
+    print(f"[gateway] stripe: provisioned {name} <{email}> ({', '.join(products) or 'all products'})")
+    return {"token": token, "name": name, "products": products or ["*"], "existing": False}
+
+
+def _stripe_signature_ok(payload: bytes, header: str) -> bool:
+    """Verify a Stripe-Signature header (t=...,v1=... HMAC-SHA256 scheme)."""
+    pairs = [p.split("=", 1) for p in header.split(",") if "=" in p]
+    timestamp = next((v for k, v in pairs if k == "t"), "")
+    if not timestamp or abs(time.time() - int(timestamp)) > 300:
+        return False
+    expected = hmac.new(
+        STRIPE_WEBHOOK_SECRET.encode(),
+        f"{timestamp}.".encode() + payload,
+        hashlib.sha256,
+    ).hexdigest()
+    return any(hmac.compare_digest(expected, v) for k, v in pairs if k == "v1")
+
+
+def _welcome_html(result: dict) -> str:
+    products = result["products"]
+    if "*" in products:
+        products = list(PRODUCT_IDS)
+    items = "".join(f"<li>{html.escape(PRODUCT_NAMES.get(p, p))}</li>" for p in products)
+    return f"""<!doctype html>
+<html lang="en"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex">
+<title>Welcome — EDC Software</title>
+<style>
+  :root {{ color-scheme: light dark;
+    --bg: #f6f7f9; --card: #ffffff; --ink: #1c2530; --muted: #5b6773;
+    --accent: #0e5a8a; --border: #e2e6ea; }}
+  @media (prefers-color-scheme: dark) {{
+    :root {{ --bg: #10151b; --card: #1a2129; --ink: #e8edf2;
+      --muted: #9aa7b2; --accent: #6fb3dc; --border: #2a333d; }} }}
+  body {{ margin: 0; background: var(--bg); color: var(--ink);
+    font: 16px/1.6 system-ui, "Segoe UI", sans-serif; }}
+  main {{ max-width: 40rem; margin: 3rem auto; padding: 0 1.25rem; }}
+  .card {{ background: var(--card); border: 1px solid var(--border);
+    border-radius: 12px; padding: 2rem; }}
+  h1 {{ margin: 0 0 .25rem; font-size: 1.5rem; }}
+  .muted {{ color: var(--muted); }}
+  code.token {{ display: block; margin: 1rem 0; padding: .9rem 1rem;
+    background: var(--bg); border: 1px solid var(--border); border-radius: 8px;
+    font-size: 1.05rem; word-break: break-all; user-select: all; }}
+  ol li, ul li {{ margin: .35rem 0; }}
+  a {{ color: var(--accent); }}
+</style></head><body><main><div class="card">
+<h1>Payment received — welcome!</h1>
+<p class="muted">An Engineering Dynamics Company product</p>
+<p>Hi {html.escape(result["name"])}, your license covers:</p>
+<ul>{items}</ul>
+<p><strong>Your access token</strong> (click to select, then copy — also keep
+this page's confirmation email from Stripe for your records):</p>
+<code class="token">{html.escape(result["token"])}</code>
+<p><strong>Set up Blender</strong> (4.2 or newer):</p>
+<ol>
+<li>Edit &rsaquo; Preferences &rsaquo; Get Extensions &rsaquo; Repositories &rsaquo; <b>+</b> &rsaquo; Add Remote Repository</li>
+<li>URL: <code>https://extensions.edccorp.com/index.json</code></li>
+<li>Tick <b>Requires Access Token</b> and paste your token into <b>Secret</b></li>
+<li>Your products appear under Get Extensions — click <b>Install</b>; updates arrive automatically</li>
+</ol>
+<p class="muted">Save your token somewhere safe — this page won't show it
+again. Lost it or need help? Reply to your receipt email or contact
+Engineering Dynamics Company.</p>
+</div></main></body></html>"""
+
+
+@app.get("/welcome")
+async def welcome(session_id: str = ""):
+    if not (STRIPE_SECRET_KEY and ADMIN_GH_TOKEN and CUSTOMERS_REPO):
+        raise HTTPException(status_code=503, detail="Stripe provisioning is not configured")
+    if not session_id:
+        raise HTTPException(status_code=404)
+    session = await _stripe_checkout_session(session_id)
+    if session.get("payment_status") not in ("paid", "no_payment_required"):
+        return HTMLResponse(
+            "<h1>Payment still processing</h1><p>Your payment hasn't settled yet. "
+            "You'll receive your access token by email once it does — or revisit "
+            "this page in a few minutes.</p>",
+            status_code=202,
+        )
+    return HTMLResponse(_welcome_html(await _provision_purchase(session)))
+
+
+@app.post("/webhook/stripe")
+async def stripe_webhook(request: Request):
+    if not (STRIPE_WEBHOOK_SECRET and STRIPE_SECRET_KEY and ADMIN_GH_TOKEN and CUSTOMERS_REPO):
+        raise HTTPException(status_code=503, detail="Stripe webhook is not configured")
+    payload = await request.body()
+    if not _stripe_signature_ok(payload, request.headers.get("stripe-signature", "")):
+        raise HTTPException(status_code=400, detail="invalid signature")
+    event = json.loads(payload)
+    if event.get("type") == "checkout.session.completed":
+        obj = event.get("data", {}).get("object", {})
+        if obj.get("payment_status") in ("paid", "no_payment_required"):
+            # Re-fetch (with expanded line items) rather than trusting the
+            # event body, then provision — a no-op if /welcome already did.
+            session = await _stripe_checkout_session(obj["id"])
+            result = await _provision_purchase(session)
+            if not result["existing"]:
+                print(f"[gateway] stripe: webhook provisioned session {obj['id']}")
+    return {"received": True}
 
 
 @app.get("/healthz")

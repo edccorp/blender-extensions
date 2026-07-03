@@ -104,7 +104,53 @@ the gateway within ~60 seconds (`CUSTOMERS_TTL`). You can also edit
   serving the **last good copy** and reports the problem at `/healthz`
   (`"ok": false` + `customers_error`).
 
-## Selling through a purchase page (Microsoft Forms + Power Automate)
+## Selling with Stripe Payment Links (recommended — fully automatic)
+
+A purchase provisions itself: the buyer pays on a Stripe-hosted checkout
+page, gets redirected to `/welcome`, and the gateway verifies the payment
+with Stripe, commits them to the customers repo, and shows their token on
+screen — seconds after paying, no human involved. A signed webhook
+provisions as a backstop if they close the browser early (same token,
+never a duplicate — provisioning is keyed to the checkout session).
+
+```
+Payment Link ──paid──▶ /welcome?session_id=...   (token on screen)
+                └─────▶ /webhook/stripe          (backstop, signature-verified)
+```
+
+One-time setup, in the **EDC Stripe account** (use a separate Stripe
+account for EDC — dashboard account picker → Create new account):
+
+1. **Products**: Stripe → Product catalog → add each product with its
+   price (CamMatch, HVE Toolkit, Point Cloud Toolkit, Recon Toolkit —
+   plus a bundle if you like).
+2. **Payment Links**: create a Payment Link per product. On each link:
+   - **After payment** → *Don't show confirmation page* → redirect to
+     `https://extensions.edccorp.com/welcome?session_id={CHECKOUT_SESSION_ID}`
+     (the `{CHECKOUT_SESSION_ID}` placeholder is literal — Stripe fills it).
+   - **Metadata**: add key `products` = the product id(s), e.g.
+     `recon_toolkit` or `cammatch,hve_toolkit` or `*` for a bundle.
+3. **Webhook**: Developers → Webhooks → Add endpoint →
+   `https://extensions.edccorp.com/webhook/stripe`, event
+   `checkout.session.completed`. Copy its signing secret (`whsec_...`).
+4. **Railway → Variables**:
+   - `STRIPE_SECRET_KEY` — from Developers → API keys. Best practice:
+     create a **restricted key** with read access to Checkout Sessions
+     and Products only.
+   - `STRIPE_WEBHOOK_SECRET` — the `whsec_...` from step 3.
+   - `ADMIN_GH_TOKEN` — write PAT on the customers repo (shared with the
+     admin API; already set if you configured that).
+5. **Test in test mode first**: Stripe's test-mode keys + a test-mode
+   payment link, card `4242 4242 4242 4242`, any future expiry/CVC. Check
+   the welcome page shows a token and the customer appears in
+   `customers.json`. Then swap the live keys into Railway.
+
+Put the payment links on the landing page / your site — they *are* the
+purchase page. Refunds: revoke with `tools/customer.py revoke` (the
+Stripe receipt email is the customer's proof of purchase; the
+`customers.json` entry records their checkout session id).
+
+## Alternative: Microsoft Forms + Power Automate (manual approval)
 
 The gateway has a provisioning API so a purchase can turn into a working
 token without touching the CLI:
