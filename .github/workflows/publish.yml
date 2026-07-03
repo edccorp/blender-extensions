@@ -1,0 +1,63 @@
+name: Publish extensions index
+
+# Rebuilds index.json from the latest GitHub release of every EDC product
+# and publishes it (plus a landing page) to GitHub Pages at
+# https://edccorp.github.io/blender-extensions/index.json
+#
+# Runs on a schedule so new product releases are picked up automatically,
+# and can be run manually (Actions -> Publish extensions index -> Run
+# workflow) right after cutting a release. Product repos can also trigger
+# it instantly with a repository_dispatch event (type: product-release).
+
+on:
+  schedule:
+    - cron: "17 */6 * * *"
+  workflow_dispatch:
+  repository_dispatch:
+    types: [product-release]
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: true
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      # While the product repos are private, the default workflow token
+      # cannot read their releases -- add a PRODUCTS_TOKEN secret (a
+      # fine-grained PAT with Contents:read on the four product repos).
+      - name: Build index.json and landing page
+        env:
+          GITHUB_TOKEN: ${{ secrets.PRODUCTS_TOKEN || github.token }}
+        run: python tools/build_index.py site
+
+      - name: Configure GitHub Pages
+        uses: actions/configure-pages@v5
+        with:
+          enablement: true
+
+      - name: Upload site
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: site
+
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v4

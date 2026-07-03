@@ -1,0 +1,67 @@
+# EDC Software — Blender Extensions Repository
+
+The Blender extensions repository for the products of **Engineering
+Dynamics Company**: add it to Blender once, and Blender offers installs
+and automatic update notifications for every EDC product.
+
+| Product | Repository |
+|---------|------------|
+| CamMatch™ | [edccorp/CamMatch](https://github.com/edccorp/CamMatch) |
+| HVE Toolkit™ | [edccorp/HVEToolkit](https://github.com/edccorp/HVEToolkit) |
+| Point Cloud Toolkit™ | [edccorp/PointCloudToolkit](https://github.com/edccorp/PointCloudToolkit) |
+| Recon Toolkit™ | [edccorp/ReconToolkit](https://github.com/edccorp/ReconToolkit) |
+
+## Add to Blender (4.2+)
+
+1. Open **Edit → Preferences → Get Extensions**.
+2. Open the **Repositories** dropdown (top-right) and click **+ → Add Remote Repository**.
+3. Paste the repository URL:
+
+   ```
+   https://edccorp.github.io/blender-extensions/index.json
+   ```
+
+4. Name it **EDC Software** and confirm.
+
+The EDC products then appear in the extensions list to install, and
+Blender notifies you when updates are available.
+
+## How it works
+
+- `tools/build_index.py` fetches the **latest GitHub release** of each
+  product, downloads its zip, reads the `blender_manifest.toml` inside it
+  (the manifest is the source of truth for id/name/version), and writes
+  `index.json` in Blender's remote-repository format plus an `index.html`
+  landing page.
+- The add-on zips are **mirrored into the published site**
+  (`packages/*.zip`), so customers can install and update even while the
+  product repos are private. Set `MIRROR_ZIPS=0` in the workflow to point
+  at the GitHub release assets directly instead (only works once the
+  product repos are public).
+- **Required setup while the product repos are private:** add a
+  `PRODUCTS_TOKEN` repository secret (a fine-grained personal access
+  token with **Contents: read** on the four product repos). The default
+  workflow token can only see this repo, so without the secret every
+  product is skipped and the index publishes empty.
+- The **Publish extensions index** workflow runs the script and deploys
+  the result to GitHub Pages. It runs every 6 hours, on every push to
+  `main`, and on demand (**Actions → Publish extensions index → Run
+  workflow**) — run it manually right after cutting a product release to
+  publish the update immediately.
+- Products whose latest release zip contains no manifest (releases cut
+  before extension support) are skipped with a log message and appear
+  automatically once a new release is published.
+
+To publish instantly from a product repo instead of waiting for the
+schedule, send a `repository_dispatch` event (type `product-release`) to
+this repo from the product's release workflow.
+
+## Maintainer notes
+
+- Add a new product by appending its `owner/repo` to `PRODUCTS` in
+  `tools/build_index.py`.
+- Test locally: `python tools/build_index.py /tmp/site` (set
+  `GITHUB_TOKEN` to avoid API rate limits), then open `/tmp/site/index.html`.
+- If a custom domain (e.g. `extensions.edccorp.com`) is added in the
+  Pages settings, update `REPOSITORY_URL` in `tools/build_index.py` and
+  the URL in this README — the old github.io URL keeps redirecting.
