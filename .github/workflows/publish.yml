@@ -17,15 +17,24 @@ on:
     types: [product-release]
   push:
     branches: [main]
+    # Only site-affecting changes need a Pages deploy; gateway/CLI pushes
+    # deploy through Railway instead and were flooding Pages with
+    # deployments (its backend then intermittently rejects them).
+    paths:
+      - tools/build_index.py
+      - .github/workflows/publish.yml
 
 permissions:
   contents: read
   pages: write
   id-token: write
 
+# Queue deployments instead of cancelling: a Pages deployment aborted
+# mid-flight makes the backend fail the next ones with "Deployment
+# failed, try again later".
 concurrency:
   group: pages
-  cancel-in-progress: true
+  cancel-in-progress: false
 
 jobs:
   publish:

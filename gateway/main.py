@@ -61,6 +61,7 @@ import json
 import os
 import secrets
 import time
+from datetime import date, timedelta
 
 import httpx
 from fastapi import FastAPI, HTTPException, Request
@@ -79,6 +80,9 @@ ADMIN_API_TOKEN = os.environ.get("ADMIN_API_TOKEN", "")
 ADMIN_GH_TOKEN = os.environ.get("ADMIN_GH_TOKEN", "")
 STRIPE_SECRET_KEY = os.environ.get("STRIPE_SECRET_KEY", "")
 STRIPE_WEBHOOK_SECRET = os.environ.get("STRIPE_WEBHOOK_SECRET", "")
+# Default license term (days of update service) for purchases whose Payment
+# Link has no term_days metadata; empty = perpetual.
+LICENSE_TERM_DAYS = os.environ.get("LICENSE_TERM_DAYS", "")
 PRODUCT_IDS = ("cammatch", "hve_toolkit", "point_cloud_toolkit", "recon_toolkit")
 PRODUCT_NAMES = {
     "cammatch": "CamMatch™",
@@ -145,24 +149,49 @@ async def _customer_tokens() -> dict:
     return {**CUSTOMER_TOKENS, **(_customers_cache["data"] or {})}
 
 
-def _entitlements(raw):
-    """Normalize a CUSTOMER_TOKENS value to {"name": str, "products": [...]}.
+def _normalize_products(products) -> dict:
+    """Normalize entitlements to {product_id: expiry}.
 
-    A plain string label means the customer is entitled to every product
-    (the original format keeps working). An object form scopes the token:
-        {"name": "Acme LLC", "products": ["cammatch", "recon_toolkit"]}
-    "*" (or an omitted/empty products list) means all products.
+    expiry is "YYYY-MM-DD" (update service runs through that date, UTC,
+    inclusive) or None for perpetual. The list form (["recon_toolkit"])
+    and "*" keep working and mean perpetual.
+    """
+    if isinstance(products, dict):
+        return dict(products)
+    return {p: None for p in (products or ["*"])}
+
+
+def _entitlements(raw):
+    """Normalize a customer entry to {"name": str, "products": {id: expiry}}.
+
+    A plain string label means every product, forever. The object form
+    scopes it — products as a list (perpetual) or a map with expiry dates:
+        {"name": "Acme LLC", "products": {"recon_toolkit": "2027-07-03"}}
     """
     if isinstance(raw, str):
-        return {"name": raw, "products": ["*"]}
+        return {"name": raw, "products": {"*": None}}
     if isinstance(raw, dict):
-        products = raw.get("products") or ["*"]
-        return {"name": raw.get("name", "unnamed"), "products": list(products)}
+        return {"name": raw.get("name", "unnamed"),
+                "products": _normalize_products(raw.get("products"))}
     return None
 
 
+def _active(expiry) -> bool:
+    return expiry is None or str(expiry) >= date.today().isoformat()
+
+
 def _entitled(customer: dict, product_id: str) -> bool:
-    return "*" in customer["products"] or product_id in customer["products"]
+    products = customer["products"]
+    return any(k in products and _active(products[k]) for k in ("*", product_id))
+
+
+def _entitlement_state(customer: dict, product_id: str) -> str:
+    """'active', 'expired' (was licensed, term lapsed), or 'none'."""
+    products = customer["products"]
+    expiries = [products[k] for k in ("*", product_id) if k in products]
+    if not expiries:
+        return "none"
+    return "active" if any(_active(e) for e in expiries) else "expired"
 
 
 async def _authed_customer(request: Request) -> dict | None:
@@ -293,6 +322,14 @@ async def admin_add_customer(request: Request):
         )
     if "*" in products:
         products = []
+    term_days = body.get("term_days")
+    if term_days is not None:
+        try:
+            term_days = int(term_days)
+            if term_days <= 0:
+                raise ValueError
+        except (TypeError, ValueError):
+            raise HTTPException(status_code=400, detail="'term_days' must be a positive integer")
 
     customers, sha = await _read_customers_file()
 
@@ -309,8 +346,11 @@ async def admin_add_customer(request: Request):
             }
 
     token = "edc_" + secrets.token_urlsafe(18)
-    if email or products:
-        customers[token] = {"name": name, "products": products or ["*"]}
+    if email or products or term_days:
+        customers[token] = {
+            "name": name,
+            "products": _merge_products({}, products or ["*"], term_days),
+        }
         if email:
             customers[token]["email"] = email
     else:
@@ -320,7 +360,7 @@ async def admin_add_customer(request: Request):
     return {
         "token": token,
         "name": name,
-        "products": products or ["*"],
+        "products": _entitlements(customers[token])["products"],
         "repository_url": "https://extensions.edccorp.com/index.json",
         "existing": False,
     }
@@ -364,7 +404,7 @@ def _session_products(session: dict) -> list[str]:
                 ids += [p.strip() for p in raw.split(",") if p.strip()]
     ids = list(dict.fromkeys(ids))
     if "*" in ids:
-        return []
+        return ["*"]
     unknown = [p for p in ids if p not in PRODUCT_IDS]
     if not ids or unknown:
         print(
@@ -383,6 +423,32 @@ def _session_products(session: dict) -> list[str]:
     return ids
 
 
+def _session_term_days(session: dict) -> int | None:
+    """License term for a purchase, in days (None = perpetual).
+
+    From a term_days metadata key on the Payment Link (copied onto the
+    session), else the LICENSE_TERM_DAYS env default.
+    """
+    raw = str((session.get("metadata") or {}).get("term_days", "") or LICENSE_TERM_DAYS).strip()
+    if not raw:
+        return None
+    try:
+        days = int(raw)
+        if days <= 0:
+            raise ValueError(raw)
+    except ValueError:
+        print(f"[gateway] ERROR: session {session.get('id')} has invalid term_days {raw!r}")
+        raise HTTPException(
+            status_code=500,
+            detail=(
+                "This purchase is missing license-term information. Your payment "
+                "went through — contact Engineering Dynamics Company and your "
+                "access will be set up right away."
+            ),
+        )
+    return days
+
+
 def _entry_sessions(value: dict) -> list:
     sessions = value.get("stripe_sessions")
     if isinstance(sessions, list):
@@ -391,10 +457,30 @@ def _entry_sessions(value: dict) -> list:
     return [legacy] if legacy else []
 
 
-def _merge_products(existing: list, new: list) -> list:
-    if "*" in existing or not new:  # either side already means "everything"
-        return ["*"]
-    return list(dict.fromkeys([*existing, *new]))
+_MISSING = object()
+
+
+def _merge_products(existing: dict, ids: list, term_days: int | None) -> dict:
+    """Fold a purchase of `ids` (for `term_days` of updates) into an entry.
+
+    Perpetual (None) always wins over a dated term. A renewal of a dated
+    product extends from its current expiry when still active — renewing
+    three months early doesn't forfeit the three months — and from today
+    when it already lapsed.
+    """
+    today = date.today()
+    new_expiry = (today + timedelta(days=term_days)).isoformat() if term_days else None
+    merged = dict(existing)
+    for pid in ids:
+        current = merged.get(pid, _MISSING)
+        if current is _MISSING:
+            merged[pid] = new_expiry
+        elif current is None or term_days is None:
+            merged[pid] = None
+        else:
+            base = max(date.fromisoformat(current), today)
+            merged[pid] = (base + timedelta(days=term_days)).isoformat()
+    return merged
 
 
 async def _provision_purchase(session: dict) -> dict:
@@ -424,7 +510,8 @@ async def _provision_purchase(session: dict) -> dict:
                     "already_processed": True,
                 }
 
-        products = _session_products(session)
+        ids = _session_products(session)
+        term_days = _session_term_days(session)
         try:
             if email:
                 for token, value in customers.items():
@@ -432,26 +519,29 @@ async def _provision_purchase(session: dict) -> dict:
                         isinstance(value, dict)
                         and value.get("email", "").strip().lower() == email.lower()
                     ):
-                        value["products"] = _merge_products(_entitlements(value)["products"], products)
+                        value["products"] = _merge_products(
+                            _entitlements(value)["products"], ids, term_days
+                        )
                         value["stripe_sessions"] = [*_entry_sessions(value), session_id]
                         value.pop("stripe_session", None)
                         entry_name = value.get("name", name)
                         await _write_customers_file(customers, sha, f"Extend license: {entry_name}")
-                        print(
-                            f"[gateway] stripe: extended {entry_name} <{email}> "
-                            f"with {', '.join(products) or 'all products'}"
-                        )
+                        print(f"[gateway] stripe: extended {entry_name} <{email}> with {', '.join(ids)}")
                         return {"token": token, "name": entry_name, "products": value["products"],
                                 "merged": True, "already_processed": False}
 
             token = "edc_" + secrets.token_urlsafe(18)
-            entry = {"name": name, "products": products or ["*"], "stripe_sessions": [session_id]}
+            entry = {
+                "name": name,
+                "products": _merge_products({}, ids, term_days),
+                "stripe_sessions": [session_id],
+            }
             if email:
                 entry["email"] = email
             customers[token] = entry
             await _write_customers_file(customers, sha, f"Add customer: {name} (Stripe purchase)")
-            print(f"[gateway] stripe: provisioned {name} <{email}> ({', '.join(products) or 'all products'})")
-            return {"token": token, "name": name, "products": products or ["*"],
+            print(f"[gateway] stripe: provisioned {name} <{email}> ({', '.join(ids)})")
+            return {"token": token, "name": name, "products": entry["products"],
                     "merged": False, "already_processed": False}
         except HTTPException as exc:
             if exc.status_code == 409 and attempt == 1:
@@ -474,10 +564,22 @@ def _stripe_signature_ok(payload: bytes, header: str) -> bool:
 
 
 def _welcome_html(result: dict) -> str:
-    products = result["products"]
+    products = _normalize_products(result["products"])
     if "*" in products:
-        products = list(PRODUCT_IDS)
-    items = "".join(f"<li>{html.escape(PRODUCT_NAMES.get(p, p))}</li>" for p in products)
+        star = products.pop("*")
+        # Each product shows its best coverage: perpetual beats any date,
+        # otherwise the later of its own expiry and the bundle's.
+        products = {
+            p: (None if star is None or products.get(p, star) is None
+                else max(products.get(p, star), star))
+            for p in PRODUCT_IDS
+        }
+    items = "".join(
+        f"<li>{html.escape(PRODUCT_NAMES.get(p, p))}"
+        + (f' <span class="muted">— updates through {html.escape(str(exp))}</span>' if exp else "")
+        + "</li>"
+        for p, exp in products.items()
+    )
     if result["merged"]:
         # Never print the full existing token on an upgrade: purchases only
         # prove control of a card, not ownership of this customer's email.
@@ -603,7 +705,8 @@ async def landing():
 async def index_json(request: Request):
     customer = await _require_customer(request)
     body = await _origin_get("index.json")
-    if "*" not in customer["products"]:
+    products = customer["products"]
+    if not ("*" in products and _active(products["*"])):
         index = json.loads(body)
         index["data"] = [
             e for e in index.get("data", []) if _entitled(customer, e.get("id", ""))
@@ -624,14 +727,17 @@ async def package(filename: str, request: Request):
     if entry is None:
         raise HTTPException(status_code=404, detail=f"unknown package {filename}")
     product_id = entry.get("id", "")
-    if product_id and not _entitled(customer, product_id):
-        raise HTTPException(
-            status_code=403,
-            detail=(
-                f"This token is not licensed for {product_id}. "
-                "Contact Engineering Dynamics Company to add it."
-            ),
+    state = _entitlement_state(customer, product_id) if product_id else "active"
+    if state != "active":
+        detail = (
+            f"Your update service for {product_id} has expired — installed "
+            "versions keep working, but updates require a renewal. Visit "
+            "https://extensions.edccorp.com or contact Engineering Dynamics Company."
+            if state == "expired"
+            else f"This token is not licensed for {product_id}. "
+            "Contact Engineering Dynamics Company to add it."
         )
+        raise HTTPException(status_code=403, detail=detail)
 
     # The API asset endpoint works for private repos; the public
     # browser_download_url does not.

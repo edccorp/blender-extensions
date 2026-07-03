@@ -158,6 +158,38 @@ different email means a fresh customer entry — if someone buys twice
 under two emails, merge by hand: `set-products` on the entry to keep,
 `revoke` the other.
 
+## Time-limited licenses (one year of updates)
+
+To sell "the add-on plus N days of updates", add a second metadata key
+to the Payment Link: `term_days` = `365`. The customer's entry then
+stores an expiry date per product:
+
+```json
+{"edc_...": {"name": "Acme LLC", "email": "buyer@acme.com",
+             "products": {"recon_toolkit": "2027-07-03"}}}
+```
+
+Nothing has to run when the year is up — the gateway checks the date on
+every request. Through the expiry date the product is served normally;
+after it, the product drops out of the customer's index (their
+**installed add-on keeps working forever**, it just stops receiving
+updates) and downloads return a friendly "renew to keep receiving
+updates" message.
+
+- **Renewals**: buying the same product again (same email — a dedicated
+  "renewal" Payment Link with the same `products` + `term_days` metadata
+  works nicely) extends the date by the term. Renewing early extends
+  from the current expiry, so no time is lost; renewing after a lapse
+  extends from today.
+- Links **without** `term_days` sell perpetual update access, and
+  perpetual always wins over a dated term when purchases mix. Set the
+  `LICENSE_TERM_DAYS` Railway variable to give links without metadata a
+  default term instead.
+- Manual equivalent: `customer.py add "Acme" --products recon_toolkit
+  --expires 2027-07-03` (and the same flag on `set-products`);
+  `customer.py list` shows the dates. The admin API accepts
+  `"term_days": 365` in the POST body.
+
 ## Alternative: Microsoft Forms + Power Automate (manual approval)
 
 The gateway has a provisioning API so a purchase can turn into a working

@@ -33,6 +33,7 @@ import secrets
 import sys
 import urllib.error
 import urllib.request
+from datetime import date
 
 REPO = os.environ.get("CUSTOMERS_REPO", "edccorp/edc-extensions-customers")
 PATH = os.environ.get("CUSTOMERS_PATH", "customers.json")
@@ -123,9 +124,13 @@ def name_of(value) -> str:
 
 
 def products_of(value) -> list[str]:
+    """Display form: 'recon_toolkit (through 2027-07-03)' for dated terms."""
     if isinstance(value, str):
         return ["*"]
-    return list(value.get("products") or ["*"])
+    products = value.get("products") or ["*"]
+    if isinstance(products, dict):
+        return [f"{p} (through {exp})" if exp else p for p, exp in products.items()]
+    return list(products)
 
 
 def find(customers: dict, key: str) -> list[str]:
@@ -146,7 +151,18 @@ def parse_products(raw: str | None) -> list[str] | None:
     return products
 
 
-def entry_for(name: str, products: list[str] | None):
+def parse_expires(raw: str | None) -> str | None:
+    if raw is None:
+        return None
+    try:
+        return date.fromisoformat(raw.strip()).isoformat()
+    except ValueError:
+        die(f"--expires must be a YYYY-MM-DD date, got {raw!r}")
+
+
+def entry_for(name: str, products: list[str] | None, expires: str | None = None):
+    if expires:
+        return {"name": name, "products": {p: expires for p in (products or ["*"])}}
     return name if products is None else {"name": name, "products": products}
 
 
@@ -163,10 +179,13 @@ def resolve_one(customers: dict, key: str) -> str:
 def cmd_add(args) -> None:
     customers, sha = fetch()
     products = parse_products(args.products)
+    expires = parse_expires(args.expires)
     token = "edc_" + secrets.token_urlsafe(18)
-    customers[token] = entry_for(args.name, products)
+    customers[token] = entry_for(args.name, products, expires)
     save(customers, sha, f"Add customer: {args.name}")
     shown = ", ".join(products) if products else "all products"
+    if expires:
+        shown += f", updates through {expires}"
     print(f"Added {args.name} ({shown}). Live on the gateway within a minute.")
     print(f"\n  Token (send to customer, shown only once):\n\n    {token}\n")
     print("Blender setup for the customer: Preferences > Get Extensions >")
@@ -190,9 +209,16 @@ def cmd_set_products(args) -> None:
     token = resolve_one(customers, args.customer)
     name = name_of(customers[token])
     products = parse_products(args.products)
-    customers[token] = entry_for(name, products)
+    expires = parse_expires(args.expires)
+    if isinstance(customers[token], dict):  # keep email/stripe_sessions
+        if expires:
+            customers[token]["products"] = {p: expires for p in (products or ["*"])}
+        else:
+            customers[token]["products"] = products or ["*"]
+    else:
+        customers[token] = entry_for(name, products, expires)
     save(customers, sha, f"Set products for {name}: {args.products or '*'}")
-    shown = ", ".join(products) if products else "all products"
+    shown = ", ".join(products_of(customers[token]))
     print(f"{name} is now licensed for: {shown} (live within a minute)")
 
 
@@ -212,6 +238,7 @@ def main() -> None:
     p = sub.add_parser("add", help="add a customer and print their new token")
     p.add_argument("name", help='customer label, e.g. "Acme Reconstruction LLC"')
     p.add_argument("--products", help=f"comma-separated ids ({', '.join(PRODUCT_IDS)}); omit for all")
+    p.add_argument("--expires", help="YYYY-MM-DD — updates stop after this date; omit for perpetual")
     p.set_defaults(func=cmd_add)
 
     p = sub.add_parser("list", help="list customers, tokens, and entitlements")
@@ -220,6 +247,7 @@ def main() -> None:
     p = sub.add_parser("set-products", help="change a customer's licensed products")
     p.add_argument("customer", help="customer name or token")
     p.add_argument("--products", help="comma-separated ids, or * for all")
+    p.add_argument("--expires", help="YYYY-MM-DD — updates stop after this date; omit for perpetual")
     p.set_defaults(func=cmd_set_products)
 
     p = sub.add_parser("revoke", help="remove a customer's access")
