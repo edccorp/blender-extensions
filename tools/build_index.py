@@ -44,6 +44,7 @@ PRODUCTS = [
 
 PAGES_BASE = "https://extensions.edccorp.com"
 REPOSITORY_URL = f"{PAGES_BASE}/index.json"
+STORE_URL = f"{PAGES_BASE}/store"
 
 MIRROR_ZIPS = os.environ.get("MIRROR_ZIPS", "1").lower() not in ("0", "false", "no")
 
@@ -161,7 +162,7 @@ def render_landing_page(entries):
     <span>Blender {html.escape(e.get('blender_version_min', '4.2.0'))}+</span>
   </div>
   <p class="links"><a href="{html.escape(e.get('website', '#'))}">Documentation</a>
-     &middot; <a href="{html.escape(e['archive_url'])}">Download zip</a></p>
+     &middot; <a href="{STORE_URL}">Get access</a></p>
 </div>"""
         for e in entries
     ) or "<p>No published products yet.</p>"
@@ -197,6 +198,9 @@ h2 {{ margin-top: 2.5rem; border-bottom: 1px solid var(--border); padding-bottom
 .card .links {{ margin: 0; font-size: .9rem; }}
 a {{ color: var(--accent); text-decoration: none; }}
 a:hover {{ text-decoration: underline; }}
+.cta {{ display: inline-block; margin-top: 1rem; padding: .6rem 1.4rem; background: var(--accent);
+       color: #fff; border-radius: 8px; font-weight: 600; }}
+.cta:hover {{ text-decoration: none; opacity: .92; }}
 ol li {{ margin: .35rem 0; }}
 code {{ background: rgba(127,127,127,.15); padding: .12em .4em; border-radius: 5px; }}
 .repo-url {{ display: block; text-align: center; font-size: 1.05rem; margin: 1rem 0;
@@ -210,14 +214,18 @@ footer {{ margin-top: 3.5rem; padding-top: 1rem; border-top: 1px solid var(--bor
 <header class="hero">
   <h1>EDC Software</h1>
   <p class="sub">Professional Blender tools by Engineering Dynamics Company</p>
+  <p><a class="cta" href="{STORE_URL}">Browse the store →</a></p>
 </header>
 
 <div class="grid">
 {cards}
 </div>
 
-<h2 id="install">Install &amp; automatic updates</h2>
-<p>Add the EDC Software repository to Blender once, and every product installs
+<h2 id="install">Get access &amp; install</h2>
+<p>Purchase (or claim a free product) from the
+<a href="{STORE_URL}">EDC Software store</a> \u2014 you'll receive a personal
+<strong>access token</strong> on the confirmation page. Then add the repository to
+Blender once, paste in your token, and every product you're licensed for installs
 from the extensions list and updates automatically:</p>
 <ol>
 <li>In Blender (4.2 or later), open <strong>Edit \u2192 Preferences \u2192 Get Extensions</strong>.</li>
@@ -225,10 +233,10 @@ from the extensions list and updates automatically:</p>
 <li>Paste the repository URL and name it <strong>EDC Software</strong>:</li>
 </ol>
 <code class="repo-url">{REPOSITORY_URL}</code>
-<p>The EDC products then appear under <em>Available</em> to install, and Blender
-notifies you when updates are published. Direct zip downloads are linked on
-each product card above for offline installs
-(<strong>Preferences \u2192 Get Extensions \u2192 Install from Disk</strong>).</p>
+<p>Enable <strong>Requires Access Token</strong> on the repository and paste your
+token into the <strong>Secret</strong> field. Your licensed products then appear
+under <em>Available</em> to install, and Blender notifies you when updates are
+published.</p>
 
 <h2 id="support">Support</h2>
 <p>Official builds, updates, training, and support for these products are
