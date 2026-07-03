@@ -11,7 +11,7 @@ One-time setup on your machine:
     set CUSTOMERS_ADMIN_TOKEN=github_pat_...
         (fine-grained PAT with Contents: read & write on the customers
          repo ONLY — do not reuse the gateway's read-only GH_TOKEN)
-    set CUSTOMERS_REPO=edccorp/edc-customers
+    set CUSTOMERS_REPO=edccorp/edc-extensions-customers
         (optional; this is the default)
 
 Usage:
@@ -34,7 +34,7 @@ import sys
 import urllib.error
 import urllib.request
 
-REPO = os.environ.get("CUSTOMERS_REPO", "edccorp/edc-customers")
+REPO = os.environ.get("CUSTOMERS_REPO", "edccorp/edc-extensions-customers")
 PATH = os.environ.get("CUSTOMERS_PATH", "customers.json")
 ADMIN_TOKEN = os.environ.get("CUSTOMERS_ADMIN_TOKEN", "")
 API_URL = f"https://api.github.com/repos/{REPO}/contents/{PATH}"

@@ -68,13 +68,13 @@ change, and revocation.
 
 One-time setup:
 
-1. Create a **private** repo `edccorp/edc-customers` (empty is fine).
+1. Create a **private** repo `edccorp/edc-extensions-customers` (empty is fine).
 2. Add that repo to the fine-grained PAT used as the gateway's `GH_TOKEN`
    (github.com → Settings → Developer settings → Fine-grained tokens →
    edit → Repository access). Contents: read is already enough.
-3. In Railway (service → Variables) add `CUSTOMERS_REPO=edccorp/edc-customers`.
+3. In Railway (service → Variables) add `CUSTOMERS_REPO=edccorp/edc-extensions-customers`.
 4. For the management CLI, create a **second** fine-grained PAT with
-   **Contents: read & write** on `edc-customers` only, and set it on your
+   **Contents: read & write** on `edc-extensions-customers` only, and set it on your
    machine: `setx CUSTOMERS_ADMIN_TOKEN github_pat_...`
 5. Migrate any tokens out of `CUSTOMER_TOKENS` (re-add them via the CLI),
    then set `CUSTOMER_TOKENS={}` — entries left there stay active even if
