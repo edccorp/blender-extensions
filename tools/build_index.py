@@ -96,6 +96,7 @@ def _manifest_from_zip(data):
 
 def build_entries(out_dir):
     entries = []
+    packages = {}
     for repo in PRODUCTS:
         release = _latest_release(repo)
         if release is None:
@@ -120,62 +121,127 @@ def build_entries(out_dir):
             continue
         entry = {k: manifest[k] for k in MANIFEST_FIELDS if k in manifest}
         if MIRROR_ZIPS:
+            # Public mode: the zips are copied onto the Pages site itself.
             pkg_dir = os.path.join(out_dir, "packages")
             os.makedirs(pkg_dir, exist_ok=True)
             with open(os.path.join(pkg_dir, asset["name"]), "wb") as fh:
                 fh.write(data)
-            entry["archive_url"] = f"{PAGES_BASE}/packages/{asset['name']}"
-        else:
-            entry["archive_url"] = asset["browser_download_url"]
+        # In gateway mode (MIRROR_ZIPS=0) the same /packages/ URL is served by
+        # the authenticated Railway gateway, which resolves the download via
+        # packages.json and streams the private GitHub release asset.
+        entry["archive_url"] = f"{PAGES_BASE}/packages/{asset['name']}"
         entry["archive_size"] = len(data)
         entry["archive_hash"] = "sha256:" + hashlib.sha256(data).hexdigest()
+        packages[asset["name"]] = {
+            "repo": repo,
+            "asset_id": asset["id"],
+            "size": len(data),
+            "sha256": hashlib.sha256(data).hexdigest(),
+        }
         entries.append(entry)
         print(f"OK   {repo}: {entry['id']} {entry['version']} ({asset['name']})")
-    return sorted(entries, key=lambda e: e["name"].lower())
+    return sorted(entries, key=lambda e: e["name"].lower()), packages
 
 
 def render_landing_page(entries):
-    rows = "\n".join(
-        f"<tr><td><a href='{html.escape(e.get('website', '#'))}'>{html.escape(e['name'])}</a></td>"
-        f"<td>{html.escape(e['version'])}</td>"
-        f"<td>{html.escape(e.get('tagline', ''))}</td>"
-        f"<td><a href='{html.escape(e['archive_url'])}'>zip</a></td></tr>"
+    taglines = {
+        "cammatch": "Professional Camera Matching for Blender",
+        "hve_toolkit": "Simulation & Workflow Tools for Blender",
+        "point_cloud_toolkit": "Point Cloud Processing & Visualization for Blender",
+        "recon_toolkit": "Accident Reconstruction Tools for Blender",
+    }
+    cards = "\n".join(
+        f"""<div class="card">
+  <h3>{html.escape(e['name'])}<span class="tm">\u2122</span></h3>
+  <p class="tagline">{html.escape(taglines.get(e['id'], e.get('tagline', '')))}</p>
+  <p class="desc">{html.escape(e.get('tagline', ''))}</p>
+  <div class="meta">
+    <span>v{html.escape(e['version'])}</span>
+    <span>Blender {html.escape(e.get('blender_version_min', '4.2.0'))}+</span>
+  </div>
+  <p class="links"><a href="{html.escape(e.get('website', '#'))}">Documentation</a>
+     &middot; <a href="{html.escape(e['archive_url'])}">Download zip</a></p>
+</div>"""
         for e in entries
-    ) or "<tr><td colspan='4'>No published extensions yet.</td></tr>"
+    ) or "<p>No published products yet.</p>"
     return f"""<!DOCTYPE html>
 <html lang="en">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>EDC Software — Blender Extensions</title>
+<title>EDC Software \u2014 Blender Extensions</title>
 <style>
-:root {{ color-scheme: light dark; }}
-body {{ font-family: system-ui, sans-serif; line-height: 1.6; max-width: 800px;
-       margin: 0 auto; padding: 2rem 1.25rem 4rem; }}
-code {{ background: rgba(127,127,127,.15); padding: .12em .35em; border-radius: 4px; }}
-table {{ border-collapse: collapse; width: 100%; margin: 1rem 0; }}
-th, td {{ border: 1px solid rgba(127,127,127,.4); padding: .5rem .6rem; text-align: left; }}
+:root {{
+  color-scheme: light dark;
+  --accent: #1a6fb5; --accent2: #b85c00;
+  --card: rgba(127,127,127,.08); --border: rgba(127,127,127,.25);
+}}
+* {{ box-sizing: border-box; }}
+body {{ font-family: system-ui, -apple-system, "Segoe UI", sans-serif; line-height: 1.6;
+       margin: 0; padding: 0 1.25rem 4rem; }}
+main {{ max-width: 960px; margin: 0 auto; }}
+header.hero {{ text-align: center; padding: 3.5rem 0 2rem; }}
+header.hero h1 {{ font-size: 2.2rem; margin: 0 0 .3rem; letter-spacing: .01em; }}
+header.hero .sub {{ font-size: 1.15rem; opacity: .75; margin: 0; }}
+h2 {{ margin-top: 2.5rem; border-bottom: 1px solid var(--border); padding-bottom: .3rem; }}
+.grid {{ display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+        gap: 1rem; margin-top: 1.5rem; }}
+.card {{ background: var(--card); border: 1px solid var(--border); border-radius: 10px;
+        padding: 1.1rem 1.25rem; }}
+.card h3 {{ margin: 0 0 .2rem; font-size: 1.2rem; }}
+.card .tm {{ font-size: .7em; vertical-align: super; opacity: .7; }}
+.card .tagline {{ margin: 0 0 .5rem; font-weight: 600; font-size: .92rem; color: var(--accent); }}
+.card .desc {{ margin: 0 0 .7rem; font-size: .9rem; opacity: .85; }}
+.card .meta {{ display: flex; gap: .8rem; font-size: .82rem; opacity: .7; margin-bottom: .5rem; }}
+.card .links {{ margin: 0; font-size: .9rem; }}
+a {{ color: var(--accent); text-decoration: none; }}
+a:hover {{ text-decoration: underline; }}
+ol li {{ margin: .35rem 0; }}
+code {{ background: rgba(127,127,127,.15); padding: .12em .4em; border-radius: 5px; }}
+.repo-url {{ display: block; text-align: center; font-size: 1.05rem; margin: 1rem 0;
+            padding: .6rem; background: rgba(127,127,127,.1); border-radius: 8px; }}
+footer {{ margin-top: 3.5rem; padding-top: 1rem; border-top: 1px solid var(--border);
+         font-size: .88rem; opacity: .75; text-align: center; }}
 </style>
 </head>
 <body>
-<h1>EDC Software — Blender Extensions</h1>
-<p>Extensions repository for the Blender products of
-<strong>Engineering Dynamics Company</strong>. Add it once and Blender
-offers updates for every EDC product automatically.</p>
-<h2>Add to Blender (4.2+)</h2>
+<main>
+<header class="hero">
+  <h1>EDC Software</h1>
+  <p class="sub">Professional Blender tools by Engineering Dynamics Company</p>
+</header>
+
+<div class="grid">
+{cards}
+</div>
+
+<h2 id="install">Install &amp; automatic updates</h2>
+<p>Add the EDC Software repository to Blender once, and every product installs
+from the extensions list and updates automatically:</p>
 <ol>
-<li>Open <strong>Edit → Preferences → Get Extensions</strong>.</li>
-<li>Open the <strong>Repositories</strong> dropdown (top-right) and click <strong>+ → Add Remote Repository</strong>.</li>
-<li>Paste this URL: <code>{REPOSITORY_URL}</code></li>
-<li>Name it <strong>EDC Software</strong> and confirm.</li>
+<li>In Blender (4.2 or later), open <strong>Edit \u2192 Preferences \u2192 Get Extensions</strong>.</li>
+<li>Open the <strong>Repositories</strong> dropdown (top right) and choose <strong>+ \u2192 Add Remote Repository</strong>.</li>
+<li>Paste the repository URL and name it <strong>EDC Software</strong>:</li>
 </ol>
-<p>The EDC products then appear in the extensions list to install, and
-Blender notifies you when updates are available.</p>
-<h2>Available extensions</h2>
-<table>
-<tr><th>Product</th><th>Version</th><th>Description</th><th>Download</th></tr>
-{rows}
-</table>
+<code class="repo-url">{REPOSITORY_URL}</code>
+<p>The EDC products then appear under <em>Available</em> to install, and Blender
+notifies you when updates are published. Direct zip downloads are linked on
+each product card above for offline installs
+(<strong>Preferences \u2192 Get Extensions \u2192 Install from Disk</strong>).</p>
+
+<h2 id="support">Support</h2>
+<p>Official builds, updates, training, and support for these products are
+provided by <strong>Engineering Dynamics Company</strong> to its customers.
+Visit <a href="https://www.edccorp.com">edccorp.com</a> or contact EDC support
+for licensing, training, and assistance.</p>
+
+<footer>
+\u00a9 Engineering Dynamics Company. CamMatch\u2122, HVE Toolkit\u2122,
+Point Cloud Toolkit\u2122, and Recon Toolkit\u2122 are trademarks of
+Engineering Dynamics Company. The software is free software under the GNU GPL;
+see each product's repository for license details.
+</footer>
+</main>
 </body>
 </html>
 """
@@ -184,10 +250,13 @@ Blender notifies you when updates are available.</p>
 def main():
     out_dir = sys.argv[1] if len(sys.argv) > 1 else "site"
     os.makedirs(out_dir, exist_ok=True)
-    entries = build_entries(out_dir)
+    entries, packages = build_entries(out_dir)
     index = {"version": "v1", "blocklist": [], "data": entries}
     with open(os.path.join(out_dir, "index.json"), "w", encoding="utf-8") as fh:
         json.dump(index, fh, indent=2)
+        fh.write("\n")
+    with open(os.path.join(out_dir, "packages.json"), "w", encoding="utf-8") as fh:
+        json.dump(packages, fh, indent=2)
         fh.write("\n")
     with open(os.path.join(out_dir, "index.html"), "w", encoding="utf-8") as fh:
         fh.write(render_landing_page(entries))
