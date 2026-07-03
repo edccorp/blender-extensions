@@ -312,13 +312,12 @@ def render_product_page(pid, c, release):
     )
     version_box = ""
     if release:
-        notes = paragraphs(release["notes"]) if release["notes"].strip() else ""
-        released = f"&mdash; released {html.escape(release['published'])} " if release["published"] else ""
+        # No release-notes body: these are the first public releases, and the
+        # GitHub notes reference pre-launch internal work.
         version_box = f"""<h2>Latest version</h2>
 <p><strong>v{html.escape(release['version'])}</strong>
-{released}&middot; delivered through the <a href="{PAGES_BASE}/">EDC Software repository</a>
-with automatic update notifications in Blender.</p>
-{notes}"""
+&middot; delivered through the <a href="{PAGES_BASE}/">EDC Software repository</a>
+with automatic update notifications in Blender.</p>"""
     return f"""<!DOCTYPE html>
 <html lang="en">
 <head>
