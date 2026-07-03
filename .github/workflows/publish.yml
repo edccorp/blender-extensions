@@ -43,9 +43,14 @@ jobs:
       # While the product repos are private, the default workflow token
       # cannot read their releases -- add a PRODUCTS_TOKEN secret (a
       # fine-grained PAT with Contents:read on the four product repos).
+      # MIRROR_ZIPS=0: gateway mode. The zips are NOT copied onto the public
+      # Pages site; the Railway gateway at extensions.edccorp.com serves the
+      # same /packages/ URLs by streaming the private GitHub release assets
+      # to authenticated customers (see gateway/README.md).
       - name: Build index.json and landing page
         env:
           GITHUB_TOKEN: ${{ secrets.PRODUCTS_TOKEN || github.token }}
+          MIRROR_ZIPS: "0"
         run: python tools/build_index.py site
 
       - name: Configure GitHub Pages
