@@ -183,6 +183,24 @@ payment links. Promotion codes are enabled at checkout. To turn it on:
 same as `term_days` metadata on payment links. Individual payment links
 keep working alongside the store.
 
+## Free products
+
+`FREE_PRODUCTS` (Railway variable, comma-separated ids, e.g.
+`hve_toolkit,recon_toolkit`) marks products as free:
+
+- They come with **every** valid token automatically.
+- `/register` hands them out without payment — name + email → instant
+  token (each registration is a commit to the customers repo, so the
+  free user list doubles as a mailing list). The store and `/checkout`
+  route free-only selections there; mixed free+paid selections still go
+  through one Stripe checkout.
+- `FREE_TERM_DAYS` (e.g. `365`) stamps an update-service expiry on each
+  free registration, so "free for now" has a built-in sunset if the
+  product is later charged for. Empty = perpetual.
+- To start charging later: remove the id from `FREE_PRODUCTS`, price it
+  in Stripe + `STRIPE_PRICES`, set its `price` in `content/products/`.
+  Already-registered users keep whatever term their entry carries.
+
 ## Time-limited licenses (one year of updates)
 
 To sell "the add-on plus N days of updates", add a second metadata key

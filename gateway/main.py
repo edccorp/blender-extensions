@@ -98,6 +98,16 @@ PUBLIC_BASE = os.environ.get("PUBLIC_BASE", "https://extensions.edccorp.com").rs
 FREE_PRODUCTS = [
     p.strip() for p in os.environ.get("FREE_PRODUCTS", "").split(",") if p.strip()
 ]
+# Update-service term (days) stamped on free registrations, so "free for
+# now" has a built-in sunset if a product is later charged for. Empty =
+# perpetual. Invalid values fail loudly rather than silently granting forever.
+try:
+    FREE_TERM_DAYS = int(os.environ.get("FREE_TERM_DAYS", "") or 0) or None
+    FREE_TERM_ERROR = None
+except ValueError as exc:
+    FREE_TERM_DAYS = None
+    FREE_TERM_ERROR = f"FREE_TERM_DAYS is not a number: {exc}"
+    print(f"[gateway] ERROR: {FREE_TERM_ERROR}")
 # Display order (store rows, welcome-page listings).
 PRODUCT_IDS = ("cammatch", "point_cloud_toolkit", "recon_toolkit", "hve_toolkit")
 PRODUCT_NAMES = {
@@ -900,7 +910,7 @@ Enter your details and your personal access token is created instantly.</p>
 @app.get("/register")
 async def register(request: Request):
     """Free-product registration: name + email -> instant token, no payment."""
-    if not (ADMIN_GH_TOKEN and CUSTOMERS_REPO and FREE_PRODUCTS):
+    if not (ADMIN_GH_TOKEN and CUSTOMERS_REPO and FREE_PRODUCTS) or FREE_TERM_ERROR:
         raise HTTPException(status_code=503, detail="free registration is not configured")
     q = request.query_params
     ids = [p.strip() for p in q.get("products", "").split(",") if p.strip() in FREE_PRODUCTS]
@@ -928,11 +938,12 @@ extensions.edccorp.com repository in Blender and
 Lost your token? Contact Engineering Dynamics Company.</p>""")
 
     token = "edc_" + secrets.token_urlsafe(18)
-    customers[token] = {"name": name, "email": email, "products": ids}
+    products = _merge_products({}, ids, FREE_TERM_DAYS)
+    customers[token] = {"name": name, "email": email, "products": products}
     await _write_customers_file(customers, sha, f"Free registration: {name}")
     print(f"[gateway] free registration: {name} <{email}> ({', '.join(ids)})")
     return HTMLResponse(_welcome_html(
-        {"token": token, "name": name, "products": {p: None for p in ids}, "merged": False}
+        {"token": token, "name": name, "products": products, "merged": False}
     ))
 
 
@@ -940,13 +951,18 @@ Lost your token? Contact Engineering Dynamics Company.</p>""")
 async def healthz():
     tokens = await _customer_tokens()
     body = {
-        "ok": TOKENS_ERROR is None and PRICES_ERROR is None,
+        "ok": TOKENS_ERROR is None and PRICES_ERROR is None and FREE_TERM_ERROR is None,
         "tokens_configured": len(tokens),
         "store_products": len(STRIPE_PRICES),
         "stripe_key": bool(STRIPE_SECRET_KEY),
+        "free_products": FREE_PRODUCTS,
+        "free_term_days": FREE_TERM_DAYS,
+        "license_term_days": LICENSE_TERM_DAYS.strip() or None,
     }
     if PRICES_ERROR:
         body["store_error"] = PRICES_ERROR
+    if FREE_TERM_ERROR:
+        body["free_term_error"] = FREE_TERM_ERROR
     if CUSTOMERS_REPO:
         body["customers_source"] = CUSTOMERS_REPO
         if _customers_cache["error"]:
