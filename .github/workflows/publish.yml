@@ -22,6 +22,7 @@ on:
     # deployments (its backend then intermittently rejects them).
     paths:
       - tools/build_index.py
+      - content/**
       - .github/workflows/publish.yml
 
 permissions:

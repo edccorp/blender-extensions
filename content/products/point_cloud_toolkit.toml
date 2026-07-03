@@ -1,0 +1,41 @@
+# Product page content for Point Cloud Toolkit™ — drafted from the repo
+# README; review the wording and adjust prices/sections as needed.
+
+name = "Point Cloud Toolkit™"
+tagline = "Point Cloud Processing & Visualization for Blender"
+badge = "From laser scan to textured surface"
+price = "$399"
+
+pitch = """Point Cloud Toolkit™ imports, filters, and surfaces laser-scan \
+point clouds inside Blender. Built for accident-reconstruction and \
+vehicle-simulation workflows — and just as at home anywhere scan data meets \
+Blender — it turns raw scans into clean, textured ground and 3D surfaces \
+ready for animation and analysis."""
+
+features = [
+    "Import PLY, PTX, E57, LAS/LAZ, and PCD as colored point clouds with Geometry Nodes display",
+    "Points Visible % control keeps the viewport responsive on million-point clouds",
+    "Voxel subsampling and Statistical Outlier Removal — always to a new cloud, the original is never modified",
+    "Draped ground surfaces: percentile ground sampling, spike rejection, hole filling, and clip-to-object",
+    "Full 3D reconstruction via Open3D — Poisson, Ball Pivoting, or Alpha Shape — for vertical and overhanging geometry",
+    "Automatic color textures baked straight from the cloud, with texture tiling, rebaking, and bulge trimming",
+    "NumPy-vectorized throughout for million-point performance",
+]
+
+includes = [
+    "Official Point Cloud Toolkit™ software package",
+    "One year of software updates",
+    "Official documentation",
+]
+
+requirements = [
+    "Blender 4.2 or newer",
+    "Optional dependencies — Open3D (3D reconstruction), pye57 (E57), laspy (LAZ) — install themselves from the panel when first needed",
+]
+
+[[sections]]
+title = "Who It's For"
+body = """Accident reconstructionists working from scene scans, engineering \
+consultants building simulation environments, and anyone who needs \
+laser-scan data as usable geometry in Blender — surveying, visualization, \
+and research included."""

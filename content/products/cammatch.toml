@@ -1,0 +1,73 @@
+# Product page content for CamMatch™ Professional.
+# Edit this file and push — the page rebuilds on the next publish run.
+
+name = "CamMatch™ Professional"
+tagline = "Professional Camera Matching for Blender"
+badge = "Built for Blender • Powered by OpenCV"
+price = "$599"
+hero_image = "cammatch-hero.jpg"
+
+pitch = """CamMatch™ Professional is a professional camera matching solution \
+developed for accident reconstruction, forensic engineering, and technical \
+visualization. Built as a native Blender add-on and powered by OpenCV, it \
+provides an efficient workflow for camera calibration, camera pose \
+estimation, lens distortion correction, reprojection analysis, and forensic \
+visualization — all inside Blender."""
+
+features = [
+    "Native Blender integration",
+    "Camera calibration",
+    "Camera pose estimation",
+    "Lens distortion calibration",
+    "2D-to-3D object linking",
+    "Multi-frame camera tracking",
+    "Reprojection error analysis",
+    "Diagnostic overlays",
+    "Monte Carlo uncertainty analysis",
+    "Forensic visualization workflows",
+]
+
+includes = [
+    "Official CamMatch™ Professional software package",
+    "One year of software updates",
+    "One seat in the CamMatch™ Professional Certification Program",
+    "Live virtual instructor-led certification training",
+    "Practice Blender projects and datasets",
+    "Official documentation",
+    "CamMatch™ Professional Certificate upon successful completion",
+]
+
+requirements = [
+    "Blender 4.2 or newer",
+    "OpenCV — installs automatically from the panel on first run (Windows, macOS, and Linux)",
+]
+
+[[sections]]
+title = "Professional Certification"
+body = """The CamMatch™ Professional Certification Program teaches the \
+complete camera matching workflow inside Blender, including 2D image \
+markers, 3D control points, object linking, camera calibration, camera pose \
+solving, reprojection error analysis, diagnostic visualization, and best \
+practices for forensic visualization.
+
+Your purchase includes one seat in the certification program. Sessions are \
+scheduled periodically by Engineering Dynamics Company based on demand, \
+with class sizes intentionally limited for personalized instruction and \
+interactive Q&A.
+
+First certification session: July 27–28, 2026, 12:00 PM – 5:00 PM Eastern \
+Time (US). Seats are limited — reserve your place early."""
+
+[[sections]]
+title = "Built for Professionals"
+body = """CamMatch™ Professional is designed for accident reconstruction \
+engineers, forensic engineers, engineering consultants, government \
+agencies, law enforcement, universities, researchers, and professional \
+visualization specialists."""
+
+[[sections]]
+title = "Enterprise Solutions"
+body = """Need CamMatch™ for your entire organization? Engineering Dynamics \
+Company also offers enterprise and multi-user packages, private virtual \
+training, on-site training, consulting, custom development, and volume \
+licensing. Contact info@edccorp.com."""

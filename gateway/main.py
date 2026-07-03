@@ -245,6 +245,8 @@ async def _origin_get(path: str) -> bytes:
         return hit[1]
     async with httpx.AsyncClient(follow_redirects=True, timeout=30.0) as client:
         resp = await client.get(f"{ORIGIN_BASE}/{path}")
+    if resp.status_code == 404:
+        raise HTTPException(status_code=404)
     if resp.status_code != 200:
         raise HTTPException(status_code=502, detail=f"origin returned {resp.status_code} for {path}")
     _origin_cache[path] = (now, resp.content)
@@ -855,8 +857,38 @@ async def healthz():
 
 @app.get("/")
 async def landing():
-    html = await _origin_get("index.html")
-    return Response(content=html, media_type="text/html")
+    page = await _origin_get("index.html")
+    return Response(content=page, media_type="text/html")
+
+
+@app.get("/products/{pid}")
+async def product_page(pid: str):
+    """Static product pages, proxied from the Pages origin."""
+    pid = pid.removesuffix(".html")
+    if not pid.replace("_", "").isalnum():
+        raise HTTPException(status_code=404)
+    page = await _origin_get(f"products/{pid}.html")
+    return Response(content=page, media_type="text/html")
+
+
+_ASSET_TYPES = {
+    ".jpg": "image/jpeg", ".jpeg": "image/jpeg", ".png": "image/png",
+    ".webp": "image/webp", ".gif": "image/gif", ".svg": "image/svg+xml",
+    ".mp4": "video/mp4",
+}
+
+
+@app.get("/assets/{name}")
+async def asset(name: str):
+    ext = os.path.splitext(name)[1].lower()
+    if "/" in name or ".." in name or ext not in _ASSET_TYPES:
+        raise HTTPException(status_code=404)
+    data = await _origin_get(f"assets/{name}")
+    return Response(
+        content=data,
+        media_type=_ASSET_TYPES[ext],
+        headers={"Cache-Control": "public, max-age=3600"},
+    )
 
 
 @app.get("/index.json")

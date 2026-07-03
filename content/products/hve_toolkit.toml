@@ -1,0 +1,43 @@
+# Product page content for HVE Toolkit™ — drafted from the repo README;
+# review the wording and adjust prices/sections as needed.
+
+name = "HVE Toolkit™"
+tagline = "Simulation & Workflow Tools for Blender"
+badge = "Built for HVE users"
+price = ""
+
+pitch = """HVE Toolkit™ connects Blender to Human Vehicle Environment (HVE) \
+simulation workflows. Prepare vehicles and environments for simulation, \
+export H3D geometry, and bring simulation results back into Blender as \
+animation — pre- and post-simulation, all from one sidebar tab."""
+
+features = [
+    "Assign HVE object types — Environment, Vehicle, GATB Surface — with one-click reclassification",
+    "One-action HVE material setup and vehicle lighting metadata (headlights, brake, turn, tail, and more)",
+    "Environment terrain metadata: surface types, friction, water, soil, and force parameters, with savable presets",
+    "Vehicle and Environment H3D export with a context-aware export button",
+    "GATB contact-surface CSV export",
+    "HVE variable output importer (.hvo / .csv) with per-vehicle options",
+    "HVE FBX importer with timeline extension, hierarchy cleanup, and collection organization",
+    "One-step Process Imported FBX: reduce shape keys, merge body meshes, smooth",
+    "RaceRender converter for HVE variable output",
+]
+
+includes = [
+    "Official HVE Toolkit™ software package",
+    "One year of software updates",
+    "Official documentation",
+]
+
+requirements = [
+    "Blender 4.2 or newer",
+    "Uses Blender's bundled Python — no extra installation",
+    "Designed to pair with HVE (Human Vehicle Environment) by Engineering Dynamics Company",
+]
+
+[[sections]]
+title = "Built for HVE Users"
+body = """HVE Toolkit™ is designed for accident reconstruction engineers \
+and simulation specialists who use HVE and want a modern 3D pipeline around \
+it — faster environment preparation before the run, and \
+presentation-quality animation of the results after it."""

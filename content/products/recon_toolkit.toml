@@ -1,0 +1,40 @@
+# Product page content for Recon Toolkit™ — drafted from the repo README;
+# review the wording and adjust prices/sections as needed.
+
+name = "Recon Toolkit™"
+tagline = "Accident Reconstruction Tools for Blender"
+badge = "From crash data to animation"
+price = ""
+
+pitch = """Recon Toolkit™ turns recorded crash data — EDR reports, motion \
+tables, survey points — into animated Blender scenes, and adds the \
+measurement and visualization tools reconstructionists need to present \
+motion clearly and defensibly."""
+
+features = [
+    "EDR importer / entry: animate from Time + Speed + Yaw Rate or Steering Wheel Angle (bicycle-model yaw, optional slip estimate), or follow a path with a speed profile",
+    "Motion data importer: full pose per timestamp from Time, X, Y, Z, Roll, Pitch, Yaw rows",
+    "Point importer: numbered, labelled survey markers, connected into polylines by description",
+    "Flexible CSV import everywhere — headers auto-matched, unit-aware, every mapping overridable",
+    "Motion path tools: generate, toggle, and convert motion paths to editable 3D curves",
+    "Timed location markers along an animated object's motion, with time labels",
+    "Scale objects to a known real-world distance between two survey points",
+    "Speed and acceleration baking to animated properties for HUD-style readouts",
+]
+
+includes = [
+    "Official Recon Toolkit™ software package",
+    "One year of software updates",
+    "Official documentation",
+]
+
+requirements = [
+    "Blender 4.2 or newer",
+    "Uses Blender's bundled Python — no extra installation",
+]
+
+[[sections]]
+title = "Who It's For"
+body = """Accident reconstruction engineers and analysts who work from EDR \
+downloads, total-station or drone survey data, and motion analysis — and \
+need that data on screen as accurate, presentation-ready animation."""
