@@ -44,10 +44,19 @@ ORIGIN_BASE = os.environ.get(
 GH_TOKEN = os.environ.get("GH_TOKEN", "")
 CACHE_TTL = int(os.environ.get("CACHE_TTL", "300"))
 
+_raw_tokens = os.environ.get("CUSTOMER_TOKENS", "{}")
 try:
-    CUSTOMER_TOKENS = json.loads(os.environ.get("CUSTOMER_TOKENS", "{}"))
-except json.JSONDecodeError:
+    CUSTOMER_TOKENS = json.loads(_raw_tokens)
+    TOKENS_ERROR = None
+except json.JSONDecodeError as exc:
+    # Fail loudly: a malformed variable would otherwise silently lock out
+    # every customer with 401s. healthz surfaces the error too.
     CUSTOMER_TOKENS = {}
+    TOKENS_ERROR = f"CUSTOMER_TOKENS is not valid JSON: {exc}"
+    print(f"[gateway] ERROR: {TOKENS_ERROR}")
+if not CUSTOMER_TOKENS and _raw_tokens.strip() not in ("", "{}"):
+    TOKENS_ERROR = TOKENS_ERROR or "CUSTOMER_TOKENS parsed to an empty object"
+    print(f"[gateway] WARNING: {TOKENS_ERROR}")
 
 app = FastAPI(title="EDC Software extensions gateway", docs_url=None, redoc_url=None)
 
@@ -116,7 +125,10 @@ async def _origin_get(path: str) -> bytes:
 
 @app.get("/healthz")
 async def healthz():
-    return {"ok": True, "tokens_configured": len(CUSTOMER_TOKENS)}
+    body = {"ok": TOKENS_ERROR is None, "tokens_configured": len(CUSTOMER_TOKENS)}
+    if TOKENS_ERROR:
+        body["error"] = TOKENS_ERROR
+    return body
 
 
 @app.get("/")
