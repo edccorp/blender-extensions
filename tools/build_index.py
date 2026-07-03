@@ -47,6 +47,7 @@ PRODUCTS = [
 
 PAGES_BASE = "https://extensions.edccorp.com"
 REPOSITORY_URL = f"{PAGES_BASE}/index.json"
+STORE_URL = f"{PAGES_BASE}/store"
 
 MIRROR_ZIPS = os.environ.get("MIRROR_ZIPS", "1").lower() not in ("0", "false", "no")
 
