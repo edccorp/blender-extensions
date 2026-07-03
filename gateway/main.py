@@ -240,6 +240,10 @@ async def _write_customers_file(customers: dict, sha: str | None, message: str) 
     if sha:
         payload["sha"] = sha
     resp = await _customers_file_request("PUT", payload)
+    if resp.status_code == 409:
+        # Someone else committed between our read and write (e.g. /welcome
+        # and the webhook racing); callers re-read and retry.
+        raise HTTPException(status_code=409, detail="customer file changed concurrently")
     if resp.status_code not in (200, 201):
         raise HTTPException(
             status_code=502, detail=f"GitHub returned {resp.status_code} writing the customer file"
@@ -379,28 +383,80 @@ def _session_products(session: dict) -> list[str]:
     return ids
 
 
+def _entry_sessions(value: dict) -> list:
+    sessions = value.get("stripe_sessions")
+    if isinstance(sessions, list):
+        return sessions
+    legacy = value.get("stripe_session")  # entries written before the merge logic
+    return [legacy] if legacy else []
+
+
+def _merge_products(existing: list, new: list) -> list:
+    if "*" in existing or not new:  # either side already means "everything"
+        return ["*"]
+    return list(dict.fromkeys([*existing, *new]))
+
+
 async def _provision_purchase(session: dict) -> dict:
-    """Create (or return the already-created) customer for a paid session."""
+    """Turn a paid checkout session into a customer entry, exactly once.
+
+    A returning buyer (matched by email) keeps their existing token and
+    has the purchased products added to it — Blender holds one Secret per
+    repository, so a second token would strand their first purchase.
+    Result flags: merged (this purchase extended an existing license, so
+    the UI must not reveal the full token) and already_processed (this
+    session was provisioned before — welcome revisit or webhook replay).
+    """
     details = session.get("customer_details") or {}
-    email = details.get("email") or ""
+    email = (details.get("email") or "").strip()
     name = details.get("name") or email or "Unknown customer"
     session_id = session["id"]
 
-    customers, sha = await _read_customers_file()
-    for token, value in customers.items():
-        if isinstance(value, dict) and value.get("stripe_session") == session_id:
-            entry = _entitlements(value)
-            return {"token": token, "name": entry["name"], "products": entry["products"], "existing": True}
+    for attempt in (1, 2):
+        customers, sha = await _read_customers_file()
 
-    products = _session_products(session)
-    token = "edc_" + secrets.token_urlsafe(18)
-    entry = {"name": name, "products": products or ["*"], "stripe_session": session_id}
-    if email:
-        entry["email"] = email
-    customers[token] = entry
-    await _write_customers_file(customers, sha, f"Add customer: {name} (Stripe purchase)")
-    print(f"[gateway] stripe: provisioned {name} <{email}> ({', '.join(products) or 'all products'})")
-    return {"token": token, "name": name, "products": products or ["*"], "existing": False}
+        for token, value in customers.items():
+            if isinstance(value, dict) and session_id in _entry_sessions(value):
+                entry = _entitlements(value)
+                return {
+                    "token": token, "name": entry["name"], "products": entry["products"],
+                    "merged": _entry_sessions(value)[0] != session_id,
+                    "already_processed": True,
+                }
+
+        products = _session_products(session)
+        try:
+            if email:
+                for token, value in customers.items():
+                    if (
+                        isinstance(value, dict)
+                        and value.get("email", "").strip().lower() == email.lower()
+                    ):
+                        value["products"] = _merge_products(_entitlements(value)["products"], products)
+                        value["stripe_sessions"] = [*_entry_sessions(value), session_id]
+                        value.pop("stripe_session", None)
+                        entry_name = value.get("name", name)
+                        await _write_customers_file(customers, sha, f"Extend license: {entry_name}")
+                        print(
+                            f"[gateway] stripe: extended {entry_name} <{email}> "
+                            f"with {', '.join(products) or 'all products'}"
+                        )
+                        return {"token": token, "name": entry_name, "products": value["products"],
+                                "merged": True, "already_processed": False}
+
+            token = "edc_" + secrets.token_urlsafe(18)
+            entry = {"name": name, "products": products or ["*"], "stripe_sessions": [session_id]}
+            if email:
+                entry["email"] = email
+            customers[token] = entry
+            await _write_customers_file(customers, sha, f"Add customer: {name} (Stripe purchase)")
+            print(f"[gateway] stripe: provisioned {name} <{email}> ({', '.join(products) or 'all products'})")
+            return {"token": token, "name": name, "products": products or ["*"],
+                    "merged": False, "already_processed": False}
+        except HTTPException as exc:
+            if exc.status_code == 409 and attempt == 1:
+                continue  # /welcome and the webhook raced; re-read and retry
+            raise
 
 
 def _stripe_signature_ok(payload: bytes, header: str) -> bool:
@@ -422,6 +478,37 @@ def _welcome_html(result: dict) -> str:
     if "*" in products:
         products = list(PRODUCT_IDS)
     items = "".join(f"<li>{html.escape(PRODUCT_NAMES.get(p, p))}</li>" for p in products)
+    if result["merged"]:
+        # Never print the full existing token on an upgrade: purchases only
+        # prove control of a card, not ownership of this customer's email.
+        masked = html.escape(result["token"][:8]) + "…"
+        heading = "Purchase added to your license"
+        token_block = f"""
+<p>You already have an EDC access token (it starts with
+<code>{masked}</code>) — this purchase has been added to it
+automatically, so there is <strong>nothing to change in Blender</strong>:</p>
+<ol>
+<li>Edit &rsaquo; Preferences &rsaquo; Get Extensions</li>
+<li>Press the refresh (&#10227;) button on the <b>extensions.edccorp.com</b> repository</li>
+<li>Your new product appears — click <b>Install</b></li>
+</ol>
+<p class="muted">Lost your token or using a new computer? Reply to your
+receipt email or contact Engineering Dynamics Company.</p>"""
+    else:
+        heading = "Payment received — welcome!"
+        token_block = f"""
+<p><strong>Your access token</strong> (click to select, then copy):</p>
+<code class="token">{html.escape(result["token"])}</code>
+<p><strong>Set up Blender</strong> (4.2 or newer):</p>
+<ol>
+<li>Edit &rsaquo; Preferences &rsaquo; Get Extensions &rsaquo; Repositories &rsaquo; <b>+</b> &rsaquo; Add Remote Repository</li>
+<li>URL: <code>https://extensions.edccorp.com/index.json</code></li>
+<li>Tick <b>Requires Access Token</b> and paste your token into <b>Secret</b></li>
+<li>Your products appear under Get Extensions — click <b>Install</b>; updates arrive automatically</li>
+</ol>
+<p class="muted">Save your token somewhere safe — this page won't show it
+again. Lost it or need help? Reply to your receipt email or contact
+Engineering Dynamics Company.</p>"""
     return f"""<!doctype html>
 <html lang="en"><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
@@ -447,23 +534,11 @@ def _welcome_html(result: dict) -> str:
   ol li, ul li {{ margin: .35rem 0; }}
   a {{ color: var(--accent); }}
 </style></head><body><main><div class="card">
-<h1>Payment received — welcome!</h1>
-<p class="muted">An Engineering Dynamics Company product</p>
-<p>Hi {html.escape(result["name"])}, your license covers:</p>
+<h1>{heading}</h1>
+<p class="muted">Engineering Dynamics Company</p>
+<p>Hi {html.escape(result["name"])}, your license now covers:</p>
 <ul>{items}</ul>
-<p><strong>Your access token</strong> (click to select, then copy — also keep
-this page's confirmation email from Stripe for your records):</p>
-<code class="token">{html.escape(result["token"])}</code>
-<p><strong>Set up Blender</strong> (4.2 or newer):</p>
-<ol>
-<li>Edit &rsaquo; Preferences &rsaquo; Get Extensions &rsaquo; Repositories &rsaquo; <b>+</b> &rsaquo; Add Remote Repository</li>
-<li>URL: <code>https://extensions.edccorp.com/index.json</code></li>
-<li>Tick <b>Requires Access Token</b> and paste your token into <b>Secret</b></li>
-<li>Your products appear under Get Extensions — click <b>Install</b>; updates arrive automatically</li>
-</ol>
-<p class="muted">Save your token somewhere safe — this page won't show it
-again. Lost it or need help? Reply to your receipt email or contact
-Engineering Dynamics Company.</p>
+{token_block}
 </div></main></body></html>"""
 
 
@@ -499,7 +574,7 @@ async def stripe_webhook(request: Request):
             # event body, then provision — a no-op if /welcome already did.
             session = await _stripe_checkout_session(obj["id"])
             result = await _provision_purchase(session)
-            if not result["existing"]:
+            if not result["already_processed"]:
                 print(f"[gateway] stripe: webhook provisioned session {obj['id']}")
     return {"received": True}
 

@@ -148,7 +148,15 @@ account for EDC — dashboard account picker → Create new account):
 Put the payment links on the landing page / your site — they *are* the
 purchase page. Refunds: revoke with `tools/customer.py revoke` (the
 Stripe receipt email is the customer's proof of purchase; the
-`customers.json` entry records their checkout session id).
+`customers.json` entry records their checkout session ids).
+
+**Repeat purchases**: a buyer whose checkout email matches an existing
+customer keeps their token — the new product is added to it, and the
+welcome page says "nothing to change in Blender, just refresh" (showing
+only a masked token prefix; the full token is never re-displayed). A
+different email means a fresh customer entry — if someone buys twice
+under two emails, merge by hand: `set-products` on the entry to keep,
+`revoke` the other.
 
 ## Alternative: Microsoft Forms + Power Automate (manual approval)
 
