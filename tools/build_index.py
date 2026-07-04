@@ -179,6 +179,7 @@ h2 { margin-top: 2.5rem; border-bottom: 1px solid var(--border); padding-bottom:
 .card .meta { display: flex; gap: .8rem; font-size: .82rem; opacity: .7; margin-bottom: .7rem; }
 .card .actions { margin-top: auto; display: flex; align-items: center; gap: .9rem; }
 .card .price { font-weight: 700; }
+.price .term { font-size: .68em; font-weight: 400; opacity: .7; white-space: nowrap; }
 a { color: var(--accent); text-decoration: none; }
 a:hover { text-decoration: underline; }
 a.btn { display: inline-block; background: var(--accent); color: #fff; border-radius: 8px;
@@ -215,13 +216,19 @@ def load_products_content():
     return content
 
 
+# Shown next to every paid price. Keep in sync with the license term the
+# gateway stamps (LICENSE_TERM_DAYS) and the "Includes" list on the pages.
+UPDATE_TERM_SHORT = "1‑yr updates"
+
+
 def _buy_actions(pid, price, big=False):
     if price and price.strip().lower() == "free":
         # /checkout sends free-only selections to the /register form.
         return ('<span class="price">Free</span>\n'
                 f'<a class="btn" href="{PAGES_BASE}/checkout?products={pid}">Get it free</a>')
     if price:
-        return (f'<span class="price">{html.escape(price)}</span>\n'
+        return (f'<span class="price">{html.escape(price)}'
+                f'<span class="term"> · {UPDATE_TERM_SHORT}</span></span>\n'
                 f'<a class="btn" href="{PAGES_BASE}/checkout?products={pid}">Buy now</a>')
     return f'<a class="btn ghost" href="{STORE_URL}">See the store</a>'
 

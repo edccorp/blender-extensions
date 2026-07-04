@@ -749,21 +749,55 @@ def _money(amount: int, currency: str) -> str:
     return f"{amount / 100:,.2f} {currency.upper()}"
 
 
+def _term_labels() -> tuple[str | None, str | None]:
+    """(compact, prose) labels for the paid update term, or (None, None).
+
+    Derived from LICENSE_TERM_DAYS so the store copy always matches what
+    checkout actually stamps — empty/invalid renders no term (perpetual).
+    """
+    raw = LICENSE_TERM_DAYS.strip()
+    if not raw:
+        return None, None
+    try:
+        days = int(raw)
+    except ValueError:
+        return None, None
+    if days <= 0:
+        return None, None
+    if days % 365 == 0:
+        years = days // 365
+        prose = "one year" if years == 1 else f"{years} years"
+        compact = "1‑yr updates" if years == 1 else f"{years}‑yr updates"
+        return compact, prose
+    return f"{days}‑day updates", f"{days} days"
+
+
 @app.get("/store")
 async def store():
     if not (STRIPE_SECRET_KEY and STRIPE_PRICES):
         raise HTTPException(status_code=503, detail="store is not configured (STRIPE_PRICES)")
+    term_compact, term_prose = _term_labels()
     rows = ""
     for pid in PRODUCT_IDS:
         if pid not in STRIPE_PRICES:
             continue
         price = await _stripe_price(STRIPE_PRICES[pid])
+        price_html = html.escape(_money(price["amount"], price["currency"]))
+        if price["amount"] and term_compact:
+            price_html += f'<br><span class="term">{html.escape(term_compact)}</span>'
         rows += f"""
 <label class="row"><input type="checkbox" name="products" value="{pid}"
   data-amount="{price['amount']}" onchange="total()">
 <span><b>{html.escape(PRODUCT_NAMES[pid])}</b><br>
 <span class="muted">{html.escape(PRODUCT_TAGLINES[pid])}</span></span>
-<span class="price">{html.escape(_money(price['amount'], price['currency']))}</span></label>"""
+<span class="price">{price_html}</span></label>"""
+    term_note = (
+        f'<p class="muted note">Paid products are a one-time payment that includes '
+        f'{html.escape(term_prose)} of software updates; your add-ons keep working '
+        f'afterward, and you can renew anytime to keep receiving updates. Not an '
+        f'auto-renewing subscription.</p>'
+        if term_prose else ""
+    )
     return HTMLResponse(f"""<!doctype html>
 <html lang="en"><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
@@ -785,7 +819,10 @@ async def store():
   .row {{ display: flex; gap: .9rem; align-items: center; padding: .9rem 0;
     border-bottom: 1px solid var(--border); cursor: pointer; }}
   .row input {{ width: 1.15rem; height: 1.15rem; accent-color: var(--accent); }}
-  .row .price {{ margin-left: auto; font-weight: 600; white-space: nowrap; }}
+  .row .price {{ margin-left: auto; font-weight: 600; white-space: nowrap;
+    text-align: right; }}
+  .row .price .term {{ font-weight: 400; font-size: .78em; color: var(--muted); }}
+  .note {{ font-size: .9em; margin-top: 1rem; }}
   .foot {{ display: flex; align-items: center; margin-top: 1.25rem; }}
   #sum {{ font-size: 1.15rem; font-weight: 700; }}
   button {{ margin-left: auto; background: var(--accent); color: #fff;
@@ -804,6 +841,7 @@ upgraded automatically.</p>
 <div class="foot"><span id="sum">Select products</span>
 <button type="submit" id="buy" disabled>Checkout</button></div>
 </form>
+{term_note}
 <p class="muted"><a href="/">&larr; Back to products</a></p>
 </div></main>
 <script>
