@@ -5,6 +5,7 @@ name = "Point Cloud Toolkit™"
 tagline = "Point Cloud Processing & Visualization for Blender"
 badge = "From points to textured surface"
 price = "$399"
+hero_image = "point-cloud-toolkit-hero.png"
 
 pitch = """Point Cloud Toolkit™ imports, filters, and surfaces laser-scan \
 point clouds inside Blender. Built for accident-reconstruction and \
