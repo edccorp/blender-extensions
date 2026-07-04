@@ -3,7 +3,7 @@
 
 name = "Point Cloud Toolkit™"
 tagline = "Point Cloud Processing & Visualization for Blender"
-badge = "From laser scan to textured surface"
+badge = "From points to textured surface"
 price = "$399"
 
 pitch = """Point Cloud Toolkit™ imports, filters, and surfaces laser-scan \
