@@ -192,6 +192,10 @@ code { background: rgba(127,127,127,.15); padding: .12em .4em; border-radius: 5p
             padding: .6rem; background: rgba(127,127,127,.1); border-radius: 8px; }
 footer { margin-top: 3.5rem; padding-top: 1rem; border-top: 1px solid var(--border);
          font-size: .88rem; opacity: .75; text-align: center; }
+.support-cta { text-align: center; margin-top: 2rem; padding: 1.6rem 1.25rem;
+               background: var(--card); border: 1px solid var(--border); border-radius: 10px; }
+.support-cta h3 { margin: 0 0 .3rem; font-size: 1.25rem; }
+.support-cta p { margin: 0 auto 1rem; max-width: 40rem; opacity: .85; }
 """
 
 FOOTER_HTML = """<footer>
@@ -201,6 +205,34 @@ Engineering Dynamics Company. Blender\u00ae is a registered trademark of the
 Blender Foundation. The software is free software under the GNU GPL;
 see each product's repository for license details.
 </footer>"""
+
+# Extra CSS for the detail pages (product pages and the support page), on top
+# of SHARED_CSS. Kept as a plain string (single braces) so it can be dropped
+# straight into an f-string template.
+DETAIL_CSS = """
+.crumb { margin: 1.4rem 0 0; font-size: .9rem; }
+.phero { display: grid; grid-template-columns: 1.1fr .9fr; gap: 2rem;
+         align-items: center; padding: 2rem 0 1rem; }
+@media (max-width: 720px) { .phero { grid-template-columns: 1fr; } }
+.phero h1, .support-hero h1 { font-size: 2rem; margin: .2rem 0 .4rem; }
+.badge { display: inline-block; font-size: .8rem; font-weight: 600; letter-spacing: .03em;
+         color: var(--accent); border: 1px solid var(--accent); border-radius: 999px;
+         padding: .15rem .7rem; }
+.phero .tagline, .support-hero .tagline { font-size: 1.15rem; font-weight: 600;
+         margin: 0 0 .8rem; opacity: .85; }
+.phero .actions, .support-hero .actions { display: flex; align-items: center; gap: 1rem;
+         margin-top: 1.2rem; flex-wrap: wrap; }
+.phero .price { font-size: 1.5rem; font-weight: 700; }
+.hero-img { width: 100%; border-radius: 12px; border: 1px solid var(--border); }
+.support-hero { padding: 2rem 0 1rem; max-width: 42rem; }
+ul.checks { list-style: none; padding: 0; columns: 2; column-gap: 2rem; }
+@media (max-width: 720px) { ul.checks { columns: 1; } }
+ul.checks li { break-inside: avoid; padding-left: 1.4rem; position: relative; }
+ul.checks li::before { content: "✓"; position: absolute; left: 0; color: var(--accent);
+                       font-weight: 700; }
+.includes { background: var(--card); border: 1px solid var(--border); border-radius: 10px;
+            padding: 1.1rem 1.5rem; }
+"""
 
 
 def load_products_content():
@@ -214,6 +246,15 @@ def load_products_content():
             with open(os.path.join(products_dir, fname), "rb") as fh:
                 content[fname[:-5]] = tomllib.load(fh)
     return content
+
+
+def load_support_content():
+    """Parsed content/support.toml (the general donation page), or None."""
+    path = os.path.join(CONTENT_DIR, "support.toml")
+    if not os.path.isfile(path):
+        return None
+    with open(path, "rb") as fh:
+        return tomllib.load(fh)
 
 
 # Shown next to every paid price. Keep in sync with the license term the
@@ -236,7 +277,7 @@ def _buy_actions(pid, price, big=False):
 DISPLAY_ORDER = ["cammatch", "point_cloud_toolkit", "recon_toolkit", "hve_toolkit"]
 
 
-def render_landing_page(entries, content):
+def render_landing_page(entries, content, support=None):
     def order(e):
         return DISPLAY_ORDER.index(e["id"]) if e["id"] in DISPLAY_ORDER else len(DISPLAY_ORDER)
 
@@ -259,6 +300,14 @@ def render_landing_page(entries, content):
   <div class="actions">{_buy_actions(pid, c.get('price', ''))}</div>
 </div>""")
     cards = "\n".join(cards) or "<p>No published products yet.</p>"
+    support_cta = ""
+    if support:
+        support_cta = f"""
+<div class="support-cta">
+  <h3>{html.escape(support.get('name', 'Support development'))}</h3>
+  <p>{html.escape(support.get('tagline', ''))}</p>
+  <a class="btn ghost" href="products/support.html">Learn more &amp; donate →</a>
+</div>"""
     return f"""<!DOCTYPE html>
 <html lang="en">
 <head>
@@ -278,6 +327,7 @@ def render_landing_page(entries, content):
 <div class="grid">
 {cards}
 </div>
+{support_cta}
 
 <h2 id="install">Install &amp; automatic updates</h2>
 <p>Add the EDC Software repository to Blender once, and every product installs
@@ -344,27 +394,7 @@ with automatic update notifications in Blender.</p>"""
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>{esc('name')} \u2014 EDC Software</title>
-<style>{SHARED_CSS}
-.crumb {{ margin: 1.4rem 0 0; font-size: .9rem; }}
-.phero {{ display: grid; grid-template-columns: 1.1fr .9fr; gap: 2rem;
-          align-items: center; padding: 2rem 0 1rem; }}
-@media (max-width: 720px) {{ .phero {{ grid-template-columns: 1fr; }} }}
-.phero h1 {{ font-size: 2rem; margin: .2rem 0 .4rem; }}
-.badge {{ display: inline-block; font-size: .8rem; font-weight: 600; letter-spacing: .03em;
-         color: var(--accent); border: 1px solid var(--accent); border-radius: 999px;
-         padding: .15rem .7rem; }}
-.phero .tagline {{ font-size: 1.15rem; font-weight: 600; margin: 0 0 .8rem; opacity: .85; }}
-.phero .actions {{ display: flex; align-items: center; gap: 1rem; margin-top: 1.2rem; }}
-.phero .price {{ font-size: 1.5rem; font-weight: 700; }}
-.hero-img {{ width: 100%; border-radius: 12px; border: 1px solid var(--border); }}
-ul.checks {{ list-style: none; padding: 0; columns: 2; column-gap: 2rem; }}
-@media (max-width: 720px) {{ ul.checks {{ columns: 1; }} }}
-ul.checks li {{ break-inside: avoid; padding-left: 1.4rem; position: relative; }}
-ul.checks li::before {{ content: "\u2713"; position: absolute; left: 0; color: var(--accent);
-                        font-weight: 700; }}
-.includes {{ background: var(--card); border: 1px solid var(--border); border-radius: 10px;
-            padding: 1.1rem 1.5rem; }}
-</style>
+<style>{SHARED_CSS}{DETAIL_CSS}</style>
 </head>
 <body>
 <main>
@@ -413,11 +443,73 @@ versions keep working even after an update term ends.</p>
 """
 
 
+def render_support_page(c):
+    """The general 'Support development' donation page from content/support.toml.
+
+    A peer of the product pages (rendered to products/support.html) but with
+    no price, version, or install section — its call to action is the
+    donation button pointing at the pay-what-you-want Stripe link.
+    """
+    def esc(key, default=""):
+        return html.escape(str(c.get(key, default)))
+
+    def paragraphs(text):
+        return "\n".join(f"<p>{html.escape(p.strip())}</p>"
+                         for p in text.split("\n\n") if p.strip())
+
+    donate_url = c.get("donate_url", "")
+    donate = (f'<a class="btn" href="{html.escape(donate_url)}">'
+              f'{esc("donate_label", "Support development ♥")}</a>') if donate_url else ""
+    hero_img = ""
+    if c.get("hero_image"):
+        hero_img = (f'<img class="hero-img" src="../assets/{html.escape(c["hero_image"])}" '
+                    f'alt="{esc("name")}">')
+    funds = "\n".join(f"<li>{html.escape(f)}</li>" for f in c.get("funds", []))
+    funds_box = (f'<h2>What your support funds</h2>\n<ul class="checks">\n{funds}\n</ul>'
+                 if funds else "")
+    sections = "\n".join(
+        f"<h2>{html.escape(s.get('title', ''))}</h2>\n{paragraphs(s.get('body', ''))}"
+        for s in c.get("sections", [])
+    )
+    intro = f"""<span class="badge">{esc('badge', 'Support development')}</span>
+<h1>{esc('name')}</h1>
+<p class="tagline">{esc('tagline')}</p>
+{paragraphs(c.get('pitch', ''))}
+<div class="actions">{donate}</div>"""
+    if hero_img:
+        hero = f'<div class="phero"><div>{intro}</div><div>{hero_img}</div></div>'
+    else:
+        hero = f'<div class="support-hero">{intro}</div>'
+    return f"""<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>{esc('name')} — EDC Software</title>
+<style>{SHARED_CSS}{DETAIL_CSS}</style>
+</head>
+<body>
+<main>
+<p class="crumb"><a href="../">← EDC Software</a></p>
+{hero}
+
+{funds_box}
+
+{sections}
+
+{FOOTER_HTML}
+</main>
+</body>
+</html>
+"""
+
+
 def main():
     out_dir = sys.argv[1] if len(sys.argv) > 1 else "site"
     os.makedirs(out_dir, exist_ok=True)
     entries, packages, releases = build_entries(out_dir)
     content = load_products_content()
+    support = load_support_content()
     index = {"version": "v1", "blocklist": [], "data": entries}
     with open(os.path.join(out_dir, "index.json"), "w", encoding="utf-8") as fh:
         json.dump(index, fh, indent=2)
@@ -426,13 +518,16 @@ def main():
         json.dump(packages, fh, indent=2)
         fh.write("\n")
     with open(os.path.join(out_dir, "index.html"), "w", encoding="utf-8") as fh:
-        fh.write(render_landing_page(entries, content))
+        fh.write(render_landing_page(entries, content, support))
 
     pages_dir = os.path.join(out_dir, "products")
     os.makedirs(pages_dir, exist_ok=True)
     for pid, c in content.items():
         with open(os.path.join(pages_dir, f"{pid}.html"), "w", encoding="utf-8") as fh:
             fh.write(render_product_page(pid, c, releases.get(pid)))
+    if support:
+        with open(os.path.join(pages_dir, "support.html"), "w", encoding="utf-8") as fh:
+            fh.write(render_support_page(support))
     assets_src = os.path.join(CONTENT_DIR, "assets")
     if os.path.isdir(assets_src):
         shutil.copytree(assets_src, os.path.join(out_dir, "assets"), dirs_exist_ok=True)

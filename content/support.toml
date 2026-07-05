@@ -1,0 +1,32 @@
+# Site-level "Support development" page — a general, pay-what-you-want
+# donation toward the ongoing development of EDC's Blender toolkits. It is
+# not a product and not a purchase. Rendered to products/support.html and
+# linked from the EDC Software landing page. To change the donation target,
+# create a Stripe Payment Link with "Customers choose what to pay" and
+# metadata donation=1, then paste its URL into donate_url below.
+
+name = "Support Toolkit Development"
+badge = "Pay what you want"
+tagline = "Help fund the ongoing development of EDC's Blender toolkits"
+donate_url = "https://buy.stripe.com/eVqcMZenN6Gm5cz07D8Zq02"
+donate_label = "Support development ♥"
+
+pitch = """Engineering Dynamics Company builds a growing family of Blender \
+toolkits for accident reconstruction — CamMatch™, HVE Toolkit™, Point Cloud \
+Toolkit™, and Recon Toolkit™. They are given away for free and improved \
+continuously. If these tools save you time in your work, a contribution \
+helps keep that development going."""
+
+funds = [
+    "New features and new toolkits, driven by real reconstruction workflows",
+    "Keeping the add-ons working across each new Blender release",
+    "Documentation, worked examples, and support materials",
+    "Fixes and refinements reported by the community",
+]
+
+[[sections]]
+title = "It's a donation, not a purchase"
+body = """There's no set price — contribute whatever the toolkits are worth \
+to you. A donation grants no license and unlocks nothing, because the \
+toolkits are already free to everyone. It simply supports the work behind \
+them, and every bit is appreciated."""
