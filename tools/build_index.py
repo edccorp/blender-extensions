@@ -300,8 +300,12 @@ def render_landing_page(entries, content, support=None):
   <div class="actions">{_buy_actions(pid, c.get('price', ''))}</div>
 </div>""")
     cards = "\n".join(cards) or "<p>No published products yet.</p>"
+    hero_support_btn = ""
     support_cta = ""
     if support:
+        hero_support_btn = (
+            ' <a class="btn ghost" href="products/support.html">Support development ♥</a>'
+        )
         support_cta = f"""
 <div class="support-cta">
   <h3>{html.escape(support.get('name', 'Support development'))}</h3>
@@ -321,7 +325,7 @@ def render_landing_page(entries, content, support=None):
 <header class="hero">
   <h1>EDC Software</h1>
   <p class="sub">Professional Blender tools by Engineering Dynamics Company</p>
-  <p style="margin-top:1.2rem"><a class="btn" href="{STORE_URL}">Build your bundle \u2192</a></p>
+  <p style="margin-top:1.2rem"><a class="btn" href="{STORE_URL}">Build your bundle \u2192</a>{hero_support_btn}</p>
 </header>
 
 <div class="grid">
