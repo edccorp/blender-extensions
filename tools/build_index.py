@@ -315,6 +315,10 @@ def render_product_page(pid, c, release):
         return "\n".join(f"<p>{html.escape(p.strip())}</p>"
                          for p in text.split("\n\n") if p.strip())
 
+    donate = ""
+    if c.get("donate_url"):
+        donate = (f'\n<a class="btn ghost" href="{html.escape(c["donate_url"])}">'
+                  f'{esc("donate_label", "Support development ♥")}</a>')
     hero_img = ""
     if c.get("hero_image"):
         hero_img = (f'<img class="hero-img" src="../assets/{html.escape(c["hero_image"])}" '
@@ -371,7 +375,7 @@ ul.checks li::before {{ content: "\u2713"; position: absolute; left: 0; color: v
     <h1>{esc('name')}</h1>
     <p class="tagline">{esc('tagline')}</p>
     {paragraphs(c.get('pitch', ''))}
-    <div class="actions">{_buy_actions(pid, c.get('price', ''), big=True)}</div>
+    <div class="actions">{_buy_actions(pid, c.get('price', ''), big=True)}{donate}</div>
   </div>
   <div>{hero_img}</div>
 </div>

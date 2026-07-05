@@ -707,6 +707,13 @@ async def stripe_webhook(request: Request):
     event = json.loads(payload)
     if event.get("type") == "checkout.session.completed":
         obj = event.get("data", {}).get("object", {})
+        metadata = obj.get("metadata") or {}
+        if metadata.get("donation"):
+            # Donations (pay-what-you-want links tagged donation=1) carry no
+            # license — acknowledge and skip provisioning.
+            donor = (obj.get("customer_details") or {}).get("email", "someone kind")
+            print(f"[gateway] stripe: donation received from {donor} — thank you")
+            return {"received": True}
         if obj.get("payment_status") in ("paid", "no_payment_required"):
             # Re-fetch (with expanded line items) rather than trusting the
             # event body, then provision — a no-op if /welcome already did.

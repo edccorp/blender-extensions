@@ -6,6 +6,11 @@ tagline = "Accident Reconstruction Tools for Blender"
 badge = "From crash data to animation"
 price = "Free"
 hero_image = "recon-toolkit-hero.jpg"
+# Optional donation button on the product page: create a Stripe Payment
+# Link with "Customers choose what to pay" and metadata donation=1, then
+# paste its URL here and uncomment.
+#donate_url = "https://buy.stripe.com/..."
+#donate_label = "Support development ♥"
 
 pitch = """Recon Toolkit™ turns recorded crash data — EDR reports, motion \
 tables, survey points — into animated Blender scenes, and adds the \
