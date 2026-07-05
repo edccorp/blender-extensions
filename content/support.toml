@@ -13,9 +13,10 @@ donate_label = "Support development ♥"
 
 pitch = """Engineering Dynamics Company builds a growing family of Blender \
 toolkits for accident reconstruction — CamMatch™, HVE Toolkit™, Point Cloud \
-Toolkit™, and Recon Toolkit™. They are given away for free and improved \
-continuously. If these tools save you time in your work, a contribution \
-helps keep that development going."""
+Toolkit™, and Recon Toolkit™. Some are free and others are offered under a \
+paid support model, and all of them are improved continuously. If these \
+tools are useful in your work, a contribution helps keep that development \
+going."""
 
 funds = [
     "New features and new toolkits, driven by real reconstruction workflows",
@@ -27,6 +28,6 @@ funds = [
 [[sections]]
 title = "It's a donation, not a purchase"
 body = """There's no set price — contribute whatever the toolkits are worth \
-to you. A donation grants no license and unlocks nothing, because the \
-toolkits are already free to everyone. It simply supports the work behind \
-them, and every bit is appreciated."""
+to you. A donation is separate from buying or licensing any product: it \
+grants no license and unlocks nothing. It simply supports the ongoing \
+development work behind the toolkits, and every bit is appreciated."""
