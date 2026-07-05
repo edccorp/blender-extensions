@@ -6,6 +6,11 @@ tagline = "Simulation & Workflow Tools for Blender"
 badge = "Built for HVE users"
 price = "Free"
 hero_image = "hve-toolkit-hero.jpg"
+# Optional donation button on the product page: create a Stripe Payment
+# Link with "Customers choose what to pay" and metadata donation=1, then
+# paste its URL here and uncomment.
+donate_url = "https://buy.stripe.com/6oU6oB93t7Kq8oL5rX8Zq01"
+donate_label = "Support development ♥"
 
 pitch = """HVE Toolkit™ connects Blender to Human Vehicle Environment (HVE) \
 simulation workflows. Prepare vehicles and environments for simulation, \
