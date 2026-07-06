@@ -434,11 +434,20 @@ with automatic update notifications in Blender.</p>"""
 {version_box}
 
 <h2>Install &amp; updates</h2>
-<p>Purchases are delivered instantly: pay, receive your access token on the
-confirmation page, and add the EDC Software repository to Blender once \u2014
-your products install from the extensions list and update automatically.
-See <a href="{PAGES_BASE}/#install">setup instructions</a>. Installed
-versions keep working even after an update term ends.</p>
+<p>Your access token is delivered instantly &mdash; it appears on the
+confirmation page as soon as you check out (and free products issue one after
+a quick sign-up). Then, in Blender 4.2 or newer:</p>
+<ol>
+<li>Open <strong>Edit \u2192 Preferences \u2192 Get Extensions</strong>.</li>
+<li>Open the <strong>Repositories</strong> dropdown (top right) \u2192
+<strong>+ \u2192 Add Remote Repository</strong>, and paste
+<code>{PAGES_BASE}/index.json</code>.</li>
+<li><strong>Enable "Requires Access Token"</strong> on that repository and
+<strong>paste the token you received into the Secret field</strong>.</li>
+<li>Your products appear under <em>Available</em> &mdash; click <strong>Install</strong>.
+Updates then arrive automatically.</li>
+</ol>
+<p>Installed versions keep working even after an update term ends.</p>
 
 {FOOTER_HTML}
 </main>
