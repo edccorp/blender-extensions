@@ -60,10 +60,3 @@ body = """CamMatch™ Professional is designed for accident reconstruction \
 engineers, forensic engineers, engineering consultants, government \
 agencies, law enforcement, universities, researchers, and professional \
 visualization specialists."""
-
-[[sections]]
-title = "Enterprise Solutions"
-body = """Need CamMatch™ for your entire organization? Engineering Dynamics \
-Company also offers enterprise and multi-user packages, private virtual \
-training, on-site training, consulting, custom development, and volume \
-licensing. Contact info@edccorp.com."""
