@@ -157,8 +157,11 @@ def build_entries(out_dir):
 SHARED_CSS = """
 :root {
   color-scheme: light dark;
-  --accent: #1a6fb5; --accent2: #b85c00;
+  --accent: #6b2440; --accent2: #b85c00;
   --card: rgba(127,127,127,.08); --border: rgba(127,127,127,.25);
+}
+@media (prefers-color-scheme: dark) {
+  :root { --accent: #d98aa0; }
 }
 * { box-sizing: border-box; }
 body { font-family: system-ui, -apple-system, "Segoe UI", sans-serif; line-height: 1.6;

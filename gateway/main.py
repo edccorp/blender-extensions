@@ -665,10 +665,10 @@ Engineering Dynamics Company.</p>"""
 <style>
   :root {{ color-scheme: light dark;
     --bg: #f6f7f9; --card: #ffffff; --ink: #1c2530; --muted: #5b6773;
-    --accent: #0e5a8a; --border: #e2e6ea; }}
+    --accent: #6b2440; --border: #e2e6ea; }}
   @media (prefers-color-scheme: dark) {{
     :root {{ --bg: #10151b; --card: #1a2129; --ink: #e8edf2;
-      --muted: #9aa7b2; --accent: #6fb3dc; --border: #2a333d; }} }}
+      --muted: #9aa7b2; --accent: #d98aa0; --border: #2a333d; }} }}
   body {{ margin: 0; background: var(--bg); color: var(--ink);
     font: 16px/1.6 system-ui, "Segoe UI", sans-serif; }}
   main {{ max-width: 40rem; margin: 3rem auto; padding: 0 1.25rem; }}
@@ -822,10 +822,10 @@ async def store():
 <style>
   :root {{ color-scheme: light dark;
     --bg: #f6f7f9; --card: #ffffff; --ink: #1c2530; --muted: #5b6773;
-    --accent: #0e5a8a; --border: #e2e6ea; }}
+    --accent: #6b2440; --border: #e2e6ea; }}
   @media (prefers-color-scheme: dark) {{
     :root {{ --bg: #10151b; --card: #1a2129; --ink: #e8edf2;
-      --muted: #9aa7b2; --accent: #6fb3dc; --border: #2a333d; }} }}
+      --muted: #9aa7b2; --accent: #d98aa0; --border: #2a333d; }} }}
   body {{ margin: 0; background: var(--bg); color: var(--ink);
     font: 16px/1.6 system-ui, "Segoe UI", sans-serif; }}
   main {{ max-width: 40rem; margin: 3rem auto; padding: 0 1.25rem; }}
@@ -928,10 +928,10 @@ def _register_form_html(ids: list, error: str = "") -> str:
 <style>
   :root {{ color-scheme: light dark;
     --bg: #f6f7f9; --card: #ffffff; --ink: #1c2530; --muted: #5b6773;
-    --accent: #0e5a8a; --border: #e2e6ea; }}
+    --accent: #6b2440; --border: #e2e6ea; }}
   @media (prefers-color-scheme: dark) {{
     :root {{ --bg: #10151b; --card: #1a2129; --ink: #e8edf2;
-      --muted: #9aa7b2; --accent: #6fb3dc; --border: #2a333d; }} }}
+      --muted: #9aa7b2; --accent: #d98aa0; --border: #2a333d; }} }}
   body {{ margin: 0; background: var(--bg); color: var(--ink);
     font: 16px/1.6 system-ui, "Segoe UI", sans-serif; }}
   main {{ max-width: 30rem; margin: 3rem auto; padding: 0 1.25rem; }}
