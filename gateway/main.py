@@ -256,13 +256,23 @@ async def _require_customer(request: Request) -> dict:
 
 
 async def _origin_get(path: str) -> bytes:
-    """Fetch a small file from the Pages origin, cached for CACHE_TTL."""
+    """Fetch a small file from the Pages origin, cached for CACHE_TTL.
+
+    The origin (GitHub Pages) sits behind a Fastly CDN that can keep
+    serving an old copy after a deploy. A per-minute cache-busting query
+    param makes the CDN treat each minute's request as a fresh object, so
+    the gateway never lags the origin by more than ~1 minute plus its own
+    CACHE_TTL. A no-store request header reinforces it.
+    """
     now = time.time()
     hit = _origin_cache.get(path)
     if hit is not None and now - hit[0] < CACHE_TTL:
         return hit[1]
+    bust = int(now // 60)
+    sep = "&" if "?" in path else "?"
+    url = f"{ORIGIN_BASE}/{path}{sep}v={bust}"
     async with httpx.AsyncClient(follow_redirects=True, timeout=30.0) as client:
-        resp = await client.get(f"{ORIGIN_BASE}/{path}")
+        resp = await client.get(url, headers={"Cache-Control": "no-cache"})
     if resp.status_code == 404:
         raise HTTPException(status_code=404)
     if resp.status_code != 200:
@@ -1000,6 +1010,7 @@ async def healthz():
         "tokens_configured": len(tokens),
         "store_products": len(STRIPE_PRICES),
         "stripe_key": bool(STRIPE_SECRET_KEY),
+        "cache_ttl": CACHE_TTL,
         "free_products": FREE_PRODUCTS,
         "free_term_days": FREE_TERM_DAYS,
         "license_term_days": LICENSE_TERM_DAYS.strip() or None,
