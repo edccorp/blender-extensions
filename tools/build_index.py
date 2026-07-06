@@ -343,9 +343,9 @@ from the extensions list and updates automatically:</p>
 </ol>
 <code class="repo-url">{REPOSITORY_URL}</code>
 <p>The EDC products then appear under <em>Available</em> to install, and Blender
-notifies you when updates are published. Direct zip downloads are linked on
-each product card above for offline installs
-(<strong>Preferences \u2192 Get Extensions \u2192 Install from Disk</strong>).</p>
+notifies you when updates are published. Paid products require the access token
+delivered with your purchase &mdash; enable <strong>Requires Access Token</strong>
+on the repository and paste your token into the <strong>Secret</strong> field.</p>
 
 <h2 id="support">Support</h2>
 <p>Official builds, updates, training, and support for these products are
