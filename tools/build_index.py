@@ -342,10 +342,11 @@ from the extensions list and updates automatically:</p>
 <li>Paste the repository URL and name it <strong>EDC Software</strong>:</li>
 </ol>
 <code class="repo-url">{REPOSITORY_URL}</code>
-<p>The EDC products then appear under <em>Available</em> to install, and Blender
-notifies you when updates are published. Paid products require the access token
-delivered with your purchase &mdash; enable <strong>Requires Access Token</strong>
-on the repository and paste your token into the <strong>Secret</strong> field.</p>
+<p>The repository requires an access token &mdash; every product, free or paid,
+is delivered this way. Enable <strong>Requires Access Token</strong> on the
+repository and paste the token you received into the <strong>Secret</strong>
+field. Your licensed products then appear under <em>Available</em> to install,
+and Blender notifies you when updates are published.</p>
 
 <h2 id="support">Support</h2>
 <p>Official builds, updates, training, and support for these products are
