@@ -11,7 +11,10 @@ name: Publish extensions index
 
 on:
   schedule:
-    - cron: "17 */6 * * *"
+    # Hourly so a new product release appears in Blender within the hour.
+    # Product repos can also trigger this instantly via repository_dispatch
+    # (type: product-release) — see tools/notify-extensions.md.
+    - cron: "17 * * * *"
   workflow_dispatch:
   repository_dispatch:
     types: [product-release]
