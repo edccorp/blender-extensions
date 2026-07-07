@@ -239,6 +239,15 @@ ul.checks li::before { content: "✓"; position: absolute; left: 0; color: var(-
                        font-weight: 700; }
 .includes { background: var(--card); border: 1px solid var(--border); border-radius: 10px;
             padding: 1.1rem 1.5rem; }
+.gallery { display: grid; grid-template-columns: repeat(2, 1fr); gap: 1.2rem; margin: .6rem 0 .4rem; }
+@media (max-width: 720px) { .gallery { grid-template-columns: 1fr; } }
+.shot { margin: 0; border: 1px solid var(--border); border-radius: 12px; overflow: hidden;
+        background: var(--card); }
+.shot a { display: block; line-height: 0; }
+.shot img { width: 100%; height: auto; display: block; background: #000; transition: opacity .15s; }
+.shot a:hover img { opacity: .92; }
+.shot figcaption { line-height: 1.4; font-size: .9rem; opacity: .85; padding: .7rem .9rem; }
+.shot figcaption strong { display: block; opacity: 1; margin-bottom: .1rem; }
 """
 
 
@@ -408,6 +417,27 @@ def render_product_page(pid, c, release):
             f'{poster}>\n<source src="../assets/{html.escape(c["video"])}" type="video/mp4">\n'
             "Your browser can't play this video.</video>"
         )
+    # Screenshot gallery: [[gallery]] entries with image + optional title/caption.
+    gallery_block = ""
+    gitems = [g for g in c.get("gallery", []) if g.get("image")]
+    if gitems:
+        gheading = html.escape(c.get("gallery_title", "See it in action"))
+        cards = []
+        for g in gitems:
+            src = f'../assets/{html.escape(g["image"])}'
+            alt = html.escape(g.get("title") or g.get("caption", ""))
+            cap = ""
+            if g.get("title"):
+                cap += f'<strong>{html.escape(g["title"])}</strong>'
+            if g.get("caption"):
+                cap += html.escape(g["caption"])
+            cards.append(
+                f'<figure class="shot"><a href="{src}" target="_blank" rel="noopener">'
+                f'<img src="{src}" alt="{alt}" loading="lazy"></a>'
+                f'<figcaption>{cap}</figcaption></figure>'
+            )
+        gallery_block = f'<h2>{gheading}</h2>\n<div class="gallery">\n' + "\n".join(cards) + "\n</div>"
+
     features = "\n".join(f"<li>{html.escape(f)}</li>" for f in c.get("features", []))
     includes = "\n".join(f"<li>{html.escape(i)}</li>" for i in c.get("includes", []))
     requirements = "\n".join(f"<li>{html.escape(r)}</li>" for r in c.get("requirements", []))
@@ -446,6 +476,8 @@ with automatic update notifications in Blender.</p>"""
 </div>
 
 {video_block}
+
+{gallery_block}
 
 <h2>Capabilities</h2>
 <ul class="checks">

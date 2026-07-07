@@ -9,6 +9,28 @@ hero_image = "cammatch-hero.jpg"
 sample_report = "cammatch-sample-report.html"
 sample_report_label = "See a sample report"
 
+gallery_title = "See it in action"
+
+[[gallery]]
+image = "cammatch-calibration-scene.jpg"
+title = "Calibration city, live in Blender"
+caption = "CamMatch running natively in the Clip Editor — control points across a known 3D scene drive the camera calibration and pose solve."
+
+[[gallery]]
+image = "cammatch-distortion-heatmap.jpg"
+title = "Lens distortion heatmap"
+caption = "The recovered distortion model, visualized as per-pixel displacement — warm edges show how far the wide-angle lens bends the image."
+
+[[gallery]]
+image = "cammatch-calibration-reprojection.jpg"
+title = "Calibration reprojection"
+caption = "Per-track residuals after intrinsic calibration: every marker reprojected onto the frame with its measured error."
+
+[[gallery]]
+image = "cammatch-solve-reprojection.jpg"
+title = "Solve reprojection error"
+caption = "The final camera solve, with all tracks reprojected and labeled — quantified, defensible accuracy for forensic work."
+
 pitch = """CamMatch™ Professional is a professional camera matching solution \
 developed for accident reconstruction, forensic engineering, and technical \
 visualization. Built as a native Blender add-on and powered by OpenCV, it \
