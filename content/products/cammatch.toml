@@ -70,7 +70,7 @@ visualization specialists."""
 # the last table. Keep [[gallery]] at the end of the file.
 [[gallery]]
 image = "cammatch-calibration-scene.jpg"
-title = "Calibration city, live in Blender"
+title = "Calibration city"
 caption = "CamMatch running natively in the Clip Editor — control points across a known 3D scene drive the camera calibration and pose solve."
 
 [[gallery]]
