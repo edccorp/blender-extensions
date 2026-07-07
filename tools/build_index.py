@@ -227,6 +227,10 @@ DETAIL_CSS = """
          margin-top: 1.2rem; flex-wrap: wrap; }
 .phero .price { font-size: 1.5rem; font-weight: 700; }
 .hero-img { width: 100%; border-radius: 12px; border: 1px solid var(--border); }
+.demo-video { width: 100%; border-radius: 12px; border: 1px solid var(--border); background: #000; }
+.video-wrap { position: relative; padding-top: 56.25%; border-radius: 12px; overflow: hidden;
+  border: 1px solid var(--border); }
+.video-wrap iframe { position: absolute; inset: 0; width: 100%; height: 100%; border: 0; }
 .support-hero { padding: 2rem 0 1rem; max-width: 42rem; }
 ul.checks { list-style: none; padding: 0; columns: 2; column-gap: 2rem; }
 @media (max-width: 720px) { ul.checks { columns: 1; } }
@@ -381,6 +385,26 @@ def render_product_page(pid, c, release):
     if c.get("hero_image"):
         hero_img = (f'<img class="hero-img" src="../assets/{html.escape(c["hero_image"])}" '
                     f'alt="{esc("name")}">')
+
+    # Demo video: a self-hosted file in content/assets/ (video = "clip.mp4",
+    # optional video_poster = "poster.jpg") or a YouTube embed (youtube = "ID").
+    video_block = ""
+    vheading = html.escape(c.get("video_title", "See it in action"))
+    if c.get("youtube"):
+        yt = html.escape(str(c["youtube"]).rsplit("/", 1)[-1].split("=")[-1])
+        video_block = (
+            f'<h2>{vheading}</h2>\n<div class="video-wrap"><iframe '
+            f'src="https://www.youtube-nocookie.com/embed/{yt}" title="{esc("name")} demo" '
+            'loading="lazy" allow="fullscreen; picture-in-picture" allowfullscreen></iframe></div>'
+        )
+    elif c.get("video"):
+        poster = (f' poster="../assets/{html.escape(c["video_poster"])}"'
+                  if c.get("video_poster") else "")
+        video_block = (
+            f'<h2>{vheading}</h2>\n<video class="demo-video" controls preload="metadata"'
+            f'{poster}>\n<source src="../assets/{html.escape(c["video"])}" type="video/mp4">\n'
+            "Your browser can't play this video.</video>"
+        )
     features = "\n".join(f"<li>{html.escape(f)}</li>" for f in c.get("features", []))
     includes = "\n".join(f"<li>{html.escape(i)}</li>" for i in c.get("includes", []))
     requirements = "\n".join(f"<li>{html.escape(r)}</li>" for r in c.get("requirements", []))
@@ -417,6 +441,8 @@ with automatic update notifications in Blender.</p>"""
   </div>
   <div>{hero_img}</div>
 </div>
+
+{video_block}
 
 <h2>Capabilities</h2>
 <ul class="checks">
