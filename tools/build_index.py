@@ -361,8 +361,11 @@ from the extensions list and updates automatically:</p>
 <p>The repository requires an access token &mdash; every product, free or paid,
 is delivered this way. Enable <strong>Requires Access Token</strong> on the
 repository and paste the token you received into the <strong>Secret</strong>
-field. Your licensed products then appear under <em>Available</em> to install,
-and Blender notifies you when updates are published.</p>
+field. Your licensed products then appear under <em>Available</em> to install.
+After installing, <strong>make sure the add-on is enabled</strong> &mdash;
+installing usually ticks its checkbox, but if its sidebar tab doesn't appear,
+enable it under <strong>Edit → Preferences → Add-ons</strong>. Blender
+notifies you when updates are published.</p>
 
 <h2 id="support">Support</h2>
 <p>Official builds, updates, training, and support for these products are
@@ -509,8 +512,11 @@ a quick sign-up). Then, in Blender 4.2 or newer:</p>
 <code>{PAGES_BASE}/index.json</code>.</li>
 <li><strong>Enable "Requires Access Token"</strong> on that repository and
 <strong>paste the token you received into the Secret field</strong>.</li>
-<li>Your products appear under <em>Available</em> &mdash; click <strong>Install</strong>.
-Updates then arrive automatically.</li>
+<li>Your products appear under <em>Available</em> &mdash; click <strong>Install</strong>.</li>
+<li><strong>Make sure the add-on is enabled.</strong> Installing usually ticks its
+checkbox for you, but if the product's sidebar tab doesn't appear, open
+<strong>Edit → Preferences → Add-ons</strong>, search for the product,
+and tick its checkbox to activate it. Updates then arrive automatically.</li>
 </ol>
 <p>Installed versions keep working even after an update term ends.</p>
 

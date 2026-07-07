@@ -638,7 +638,8 @@ automatically, so there is <strong>nothing to change in Blender</strong>:</p>
 <ol>
 <li>Edit &rsaquo; Preferences &rsaquo; Get Extensions</li>
 <li>Press the refresh (&#10227;) button on the <b>extensions.edccorp.com</b> repository</li>
-<li>Your new product appears — click <b>Install</b></li>
+<li>Your new product appears — click <b>Install</b>, and make sure the add-on is
+<b>enabled</b> (tick its checkbox under Preferences &rsaquo; Add-ons if its tab doesn't show)</li>
 </ol>
 <p class="muted">Lost your token or using a new computer? Reply to your
 receipt email or contact Engineering Dynamics Company.</p>"""
@@ -652,7 +653,10 @@ receipt email or contact Engineering Dynamics Company.</p>"""
 <li>Edit &rsaquo; Preferences &rsaquo; Get Extensions &rsaquo; Repositories &rsaquo; <b>+</b> &rsaquo; Add Remote Repository</li>
 <li>URL: <code>https://extensions.edccorp.com/index.json</code></li>
 <li>Tick <b>Requires Access Token</b> and paste your token into <b>Secret</b></li>
-<li>Your products appear under Get Extensions — click <b>Install</b>; updates arrive automatically</li>
+<li>Your products appear under Get Extensions — click <b>Install</b></li>
+<li><b>Make sure the add-on is enabled.</b> Installing usually activates it, but if
+the product's sidebar tab doesn't appear, tick its checkbox under
+Edit &rsaquo; Preferences &rsaquo; Add-ons. Updates then arrive automatically.</li>
 </ol>
 <p class="muted">Save your token somewhere safe — this page won't show it
 again. Lost it or need help? Reply to your receipt email or contact
@@ -989,8 +993,9 @@ async def register(request: Request):
 <p>The token you already have (starts with <code>{html.escape(token[:8])}…</code>)
 includes every free EDC product — press the refresh button on the
 extensions.edccorp.com repository in Blender and
-{html.escape(', '.join(PRODUCT_NAMES.get(p, p) for p in ids))} will appear.
-Lost your token? Contact Engineering Dynamics Company.</p>""")
+{html.escape(', '.join(PRODUCT_NAMES.get(p, p) for p in ids))} will appear —
+click <b>Install</b>, and enable the add-on under Preferences &rsaquo; Add-ons
+if its tab doesn't show. Lost your token? Contact Engineering Dynamics Company.</p>""")
 
     token = "edc_" + secrets.token_urlsafe(18)
     products = _merge_products({}, ids, FREE_TERM_DAYS)
