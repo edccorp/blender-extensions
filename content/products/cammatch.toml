@@ -65,6 +65,19 @@ engineers, forensic engineers, engineering consultants, government \
 agencies, law enforcement, universities, researchers, and professional \
 visualization specialists."""
 
+[[sections]]
+title = "OpenCV installs automatically"
+body = """CamMatch uses OpenCV (the cv2 library) for its computer-vision math, \
+but you don't install it separately. On first run, click Install OpenCV in the \
+CamMatch add-on preferences and it sets itself up — from the copy bundled with \
+the add-on, or from the internet if needed — on Windows, macOS, and Linux, and \
+across every Blender Python version, including Blender 5.1 on Python 3.13.
+
+If a machine is offline or behind a strict corporate firewall that blocks the \
+download, the User Guide's Troubleshooting section has a one-line manual install \
+into Blender's own Python. After installing, restart Blender and click \
+Diagnostics in the CamMatch panel."""
+
 # NOTE: array-of-tables must come after every bare top-level key above,
 # or those keys (pitch/features/includes/requirements) get absorbed into
 # the last table. Keep [[gallery]] at the end of the file.
