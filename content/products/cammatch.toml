@@ -8,8 +8,6 @@ price = "$599"
 hero_image = "cammatch-hero.jpg"
 sample_report = "cammatch-sample-report.html"
 sample_report_label = "See a sample report"
-sample_project = "CalibrationCity.blend"
-sample_project_label = "Download the sample project (.blend)"
 
 pitch = """CamMatch™ Professional is a professional camera matching solution \
 developed for accident reconstruction, forensic engineering, and technical \
