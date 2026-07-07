@@ -47,8 +47,13 @@
   a { color:inherit; text-decoration:none; }
   .wrap { max-width:1060px; margin:0 auto; padding:0 1.25rem; }
 
+  /* ---- top nav ---- */
+  .topnav { max-width:1060px; margin:0 auto; padding:1.2rem 1.25rem .2rem; }
+  .topnav a { display:inline-flex; align-items:center; gap:.4rem; color:var(--muted);
+    font-size:.9rem; font-weight:600; }
+  .topnav a:hover { color:var(--accent-ink); }
   /* ---- hero ---- */
-  .hero { position:relative; overflow:hidden; padding:5.5rem 0 2.5rem; text-align:center; }
+  .hero { position:relative; overflow:hidden; padding:3.4rem 0 2.5rem; text-align:center; }
   .hero::before {
     content:""; position:absolute; inset:-40% 0 auto 0; height:150%; pointer-events:none;
     background:
@@ -154,6 +159,8 @@
 </style>
 </head>
 <body>
+<nav class="topnav"><a href="https://www.edccorp.com">&larr; Back to edccorp.com</a></nav>
+
 <header class="hero">
   <div class="wrap">
     <div class="edclogo rise" role="img" aria-label="EDC — Engineering Dynamics Company"></div>
