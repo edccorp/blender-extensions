@@ -1050,6 +1050,7 @@ _ASSET_TYPES = {
     ".webp": "image/webp", ".gif": "image/gif", ".svg": "image/svg+xml",
     ".mp4": "video/mp4",
     ".html": "text/html", ".htm": "text/html",  # hosted sample reports
+    ".blend": "application/octet-stream",  # sample project files
 }
 
 
