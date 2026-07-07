@@ -418,6 +418,7 @@ def render_product_page(pid, c, release):
         return "\n".join(f"<p>{html.escape(p.strip())}</p>"
                          for p in text.split("\n\n") if p.strip())
 
+    bmin = html.escape(str(c.get("blender_min", "4.2")))
     donate = ""
     if c.get("donate_url"):
         donate = (f'\n<a class="btn ghost" href="{html.escape(c["donate_url"])}">'
@@ -533,7 +534,7 @@ with automatic update notifications in Blender.</p>"""
 <h2>Install &amp; updates</h2>
 <p>Your access token is delivered instantly &mdash; it appears on the
 confirmation page as soon as you check out (and free products issue one after
-a quick sign-up). Then, in Blender 4.2 or newer:</p>
+a quick sign-up). Then, in Blender {bmin} or newer:</p>
 <ol>
 <li>Open <strong>Edit \u2192 Preferences \u2192 Get Extensions</strong>.</li>
 <li>Open the <strong>Repositories</strong> dropdown (top right) \u2192

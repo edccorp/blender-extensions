@@ -5,6 +5,7 @@ name = "CamMatch™ Professional"
 tagline = "Professional Camera Matching for Blender"
 badge = "Built for Blender • Powered by OpenCV"
 price = "$599"
+blender_min = "5.0"
 hero_image = "cammatch-hero.jpg"
 sample_report = "cammatch-sample-report.html"
 sample_report_label = "See a sample report"
@@ -39,7 +40,7 @@ includes = [
 ]
 
 requirements = [
-    "Blender 4.2 or newer",
+    "Blender 5.0 or newer",
     "OpenCV — installs automatically from the panel on first run (Windows, macOS, and Linux)",
 ]
 
