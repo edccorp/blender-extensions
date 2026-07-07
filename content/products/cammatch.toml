@@ -10,7 +10,11 @@ hero_image = "cammatch-hero.jpg"
 sample_report = "cammatch-sample-report.html"
 sample_report_label = "See a sample report"
 
-gallery_title = "See it in action"
+video = "cammatch-demo.mp4"
+video_title = "See it in action"
+video_poster = "cammatch-demo-poster.jpg"
+
+gallery_title = "Calibration & diagnostics"
 
 pitch = """CamMatch™ Professional is a professional camera matching solution \
 developed for accident reconstruction, forensic engineering, and technical \
