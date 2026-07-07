@@ -391,6 +391,10 @@ enable it under <strong>Edit → Preferences → Add-ons</strong>, then
 <strong>Save Preferences</strong> (the <strong>≡</strong> menu at the bottom-left of the
 Preferences window) so it stays enabled next time you open Blender. Blender
 notifies you when updates are published.</p>
+<p>Already have an older <strong>CamMatch</strong> or <strong>HVE Menu</strong> installed the old
+way (as a manual add-on)? You can disable or remove it anytime from <strong>Edit &rarr; Preferences
+&rarr; Add-ons</strong> &mdash; search for it, untick it to disable, or use <strong>Remove</strong>
+to uninstall. The new extension replaces it.</p>
 
 <h2 id="support">Support</h2>
 <p>Official builds, updates, training, and support for these products are
@@ -547,6 +551,9 @@ them automatically; if it doesn't, open the <strong>≡</strong> menu at the bot
 of the Preferences window and choose <strong>Save Preferences</strong> &mdash; otherwise
 you may have to re-enable the add-on next time you open Blender.</li>
 </ol>
+<p>Upgrading from an older, manually-installed version of this add-on? You can disable or remove
+it anytime from <strong>Edit &rarr; Preferences &rarr; Add-ons</strong> &mdash; search for it,
+untick it to disable, or use <strong>Remove</strong> to uninstall. The new extension replaces it.</p>
 <p>Installed versions keep working even after an update term ends.</p>
 
 {FOOTER_HTML}
