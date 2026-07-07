@@ -98,6 +98,20 @@ def _manifest_from_zip(data):
     return None
 
 
+def _guide_from_zip(data):
+    """Return the bundled docs/USER_GUIDE.html bytes from the zip, or None.
+
+    Each add-on ships its self-contained (logo embedded) user guide; we host
+    it publicly so the extension's "Website" link points at real docs instead
+    of a private GitHub repo.
+    """
+    with zipfile.ZipFile(io.BytesIO(data)) as zf:
+        for name in zf.namelist():
+            if name.endswith("docs/USER_GUIDE.html"):
+                return zf.read(name)
+    return None
+
+
 def build_entries(out_dir):
     entries = []
     packages = {}
@@ -125,6 +139,15 @@ def build_entries(out_dir):
             )
             continue
         entry = {k: manifest[k] for k in MANIFEST_FIELDS if k in manifest}
+        # Host the add-on's bundled user guide on the public site and point the
+        # extension's "Website" link at it, instead of a (private) GitHub repo.
+        guide = _guide_from_zip(data)
+        if guide is not None:
+            guide_dir = os.path.join(out_dir, "guides")
+            os.makedirs(guide_dir, exist_ok=True)
+            with open(os.path.join(guide_dir, f"{manifest.get('id', '')}.html"), "wb") as fh:
+                fh.write(guide)
+            entry["website"] = f"{PAGES_BASE}/guide/{manifest.get('id', '')}"
         if MIRROR_ZIPS:
             # Public mode: the zips are copied onto the Pages site itself.
             pkg_dir = os.path.join(out_dir, "packages")
@@ -364,7 +387,9 @@ repository and paste the token you received into the <strong>Secret</strong>
 field. Your licensed products then appear under <em>Available</em> to install.
 After installing, <strong>make sure the add-on is enabled</strong> &mdash;
 installing usually ticks its checkbox, but if its sidebar tab doesn't appear,
-enable it under <strong>Edit → Preferences → Add-ons</strong>. Blender
+enable it under <strong>Edit → Preferences → Add-ons</strong>, then
+<strong>Save Preferences</strong> (the <strong>≡</strong> menu at the bottom-left of the
+Preferences window) so it stays enabled next time you open Blender. Blender
 notifies you when updates are published.</p>
 
 <h2 id="support">Support</h2>
@@ -517,6 +542,10 @@ a quick sign-up). Then, in Blender 4.2 or newer:</p>
 checkbox for you, but if the product's sidebar tab doesn't appear, open
 <strong>Edit → Preferences → Add-ons</strong>, search for the product,
 and tick its checkbox to activate it. Updates then arrive automatically.</li>
+<li><strong>Save your preferences</strong> so this sticks. Blender normally saves
+them automatically; if it doesn't, open the <strong>≡</strong> menu at the bottom-left
+of the Preferences window and choose <strong>Save Preferences</strong> &mdash; otherwise
+you may have to re-enable the add-on next time you open Blender.</li>
 </ol>
 <p>Installed versions keep working even after an update term ends.</p>
 

@@ -657,6 +657,8 @@ receipt email or contact Engineering Dynamics Company.</p>"""
 <li><b>Make sure the add-on is enabled.</b> Installing usually activates it, but if
 the product's sidebar tab doesn't appear, tick its checkbox under
 Edit &rsaquo; Preferences &rsaquo; Add-ons. Updates then arrive automatically.</li>
+<li><b>Save Preferences</b> (the <b>&#8801;</b> menu at the bottom-left of the Preferences
+window) so you don't have to re-enable it next time you open Blender.</li>
 </ol>
 <p class="muted">Save your token somewhere safe — this page won't show it
 again. Lost it or need help? Reply to your receipt email or contact
@@ -1047,6 +1049,17 @@ async def product_page(pid: str):
     if not pid.replace("_", "").isalnum():
         raise HTTPException(status_code=404)
     page = await _origin_get(f"products/{pid}.html")
+    return Response(content=page, media_type="text/html")
+
+
+@app.get("/guide/{pid}")
+async def guide_page(pid: str):
+    """Public user guides, extracted from each add-on at publish time and
+    proxied from the Pages origin. This is the extension's "Website" target."""
+    pid = pid.removesuffix(".html")
+    if not pid.replace("_", "").isalnum():
+        raise HTTPException(status_code=404)
+    page = await _origin_get(f"guides/{pid}.html")
     return Response(content=page, media_type="text/html")
 
 
