@@ -381,6 +381,9 @@ def render_product_page(pid, c, release):
     if c.get("donate_url"):
         donate = (f'\n<a class="btn ghost" href="{html.escape(c["donate_url"])}">'
                   f'{esc("donate_label", "Support development ♥")}</a>')
+    if c.get("sample_report"):
+        donate += (f'\n<a class="btn ghost" href="../assets/{html.escape(c["sample_report"])}" '
+                   f'target="_blank" rel="noopener">{esc("sample_report_label", "See a sample report")}</a>')
     hero_img = ""
     if c.get("hero_image"):
         hero_img = (f'<img class="hero-img" src="../assets/{html.escape(c["hero_image"])}" '

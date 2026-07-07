@@ -1049,6 +1049,7 @@ _ASSET_TYPES = {
     ".jpg": "image/jpeg", ".jpeg": "image/jpeg", ".png": "image/png",
     ".webp": "image/webp", ".gif": "image/gif", ".svg": "image/svg+xml",
     ".mp4": "video/mp4",
+    ".html": "text/html", ".htm": "text/html",  # hosted sample reports
 }
 
 
