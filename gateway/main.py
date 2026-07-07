@@ -1063,6 +1063,13 @@ async def guide_page(pid: str):
     return Response(content=page, media_type="text/html")
 
 
+@app.get("/launch")
+async def launch_page():
+    """Standalone launch announcement — a clean URL to link from elsewhere."""
+    page = await _origin_get("assets/launch.html")
+    return Response(content=page, media_type="text/html")
+
+
 _ASSET_TYPES = {
     ".jpg": "image/jpeg", ".jpeg": "image/jpeg", ".png": "image/png",
     ".webp": "image/webp", ".gif": "image/gif", ".svg": "image/svg+xml",
