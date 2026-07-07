@@ -1038,6 +1038,14 @@ async def healthz():
 
 @app.get("/")
 async def landing():
+    # The launch announcement is the homepage; the product-grid catalog lives
+    # at /software.
+    page = await _origin_get("assets/launch.html")
+    return Response(content=page, media_type="text/html")
+
+
+@app.get("/software")
+async def software_catalog():
     page = await _origin_get("index.html")
     return Response(content=page, media_type="text/html")
 
