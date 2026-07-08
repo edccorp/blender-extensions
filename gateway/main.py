@@ -1059,6 +1059,18 @@ async def software_catalog():
     return Response(content=page, media_type="text/html")
 
 
+@app.get("/index.html")
+async def software_catalog_html():
+    page = await _origin_get("index.html")
+    return Response(content=page, media_type="text/html")
+
+
+@app.get("/access-and-licensing.html")
+async def access_and_licensing_page():
+    page = await _origin_get("access-and-licensing.html")
+    return Response(content=page, media_type="text/html")
+
+
 @app.get("/products/{pid}")
 async def product_page(pid: str):
     """Static product pages, proxied from the Pages origin."""
