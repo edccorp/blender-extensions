@@ -244,7 +244,8 @@ FOOTER_HTML = """<footer>
 Point Cloud Toolkit\u2122, and Recon Toolkit\u2122 are trademarks of
 Engineering Dynamics Company. Blender\u00ae is a registered trademark of the
 Blender Foundation. The software is free software under the GNU GPL;
-see each product's repository for license details.
+see each product's repository and <a href="access-and-licensing.html">Access
+and licensing</a> for details.
 </footer>"""
 
 # Extra CSS for the detail pages (product pages and the support page), on top
