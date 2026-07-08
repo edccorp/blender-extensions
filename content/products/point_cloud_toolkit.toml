@@ -4,6 +4,7 @@
 name = "Point Cloud Toolkit™"
 tagline = "Point Cloud Processing & Visualization for Blender"
 badge = "From points to textured surface"
+support_notice = "Not fully supported in Blender 5.1 at this time."
 price = "$399"
 hero_image = "point-cloud-toolkit-hero.jpg"
 video = "point-cloud-ground-demo.mp4"
