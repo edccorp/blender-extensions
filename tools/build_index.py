@@ -48,6 +48,7 @@ PRODUCTS = [
 PAGES_BASE = "https://extensions.edccorp.com"
 REPOSITORY_URL = f"{PAGES_BASE}/index.json"
 STORE_URL = f"{PAGES_BASE}/store"
+ACCESS_URL = f"{PAGES_BASE}/access-and-licensing.html"
 
 MIRROR_ZIPS = os.environ.get("MIRROR_ZIPS", "1").lower() not in ("0", "false", "no")
 
@@ -218,6 +219,17 @@ code { background: rgba(127,127,127,.15); padding: .12em .4em; border-radius: 5p
             padding: .6rem; background: rgba(127,127,127,.1); border-radius: 8px; }
 footer { margin-top: 3.5rem; padding-top: 1rem; border-top: 1px solid var(--border);
          font-size: .88rem; opacity: .75; text-align: center; }
+
+.notice, .faq, .terms, .callout {
+  background: var(--card); border: 1px solid var(--border); border-radius: 10px;
+  padding: 1rem 1.25rem; margin: 1rem 0;
+}
+.notice { border-left: 4px solid var(--accent); }
+.callout { text-align: center; padding: 1.4rem 1.25rem; }
+.callout h2, .callout h3 { margin-top: 0; border-bottom: 0; padding-bottom: 0; }
+.faq h3, .terms h3 { margin: 1.1rem 0 .25rem; }
+.faq h3:first-child, .terms h3:first-child { margin-top: 0; }
+.terms { font-size: .95rem; }
 .support-cta { text-align: center; margin-top: 2rem; padding: 1.6rem 1.25rem;
                background: var(--card); border: 1px solid var(--border); border-radius: 10px; }
 .support-cta h3 { margin: 0 0 .3rem; font-size: 1.25rem; }
@@ -408,6 +420,79 @@ for licensing, training, and assistance.</p>
 </html>
 """
 
+
+def render_access_licensing_page():
+    """Standalone access and licensing page for repository tokens and terms."""
+    return f"""<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Access &amp; Licensing — EDC Software</title>
+<style>{SHARED_CSS}{DETAIL_CSS}</style>
+</head>
+<body>
+<main>
+<p class="crumb"><a href="./">← EDC Software</a></p>
+<header class="support-hero">
+  <span class="badge">Access &amp; licensing</span>
+  <h1>Install EDC Software with a repository access token</h1>
+  <p class="tagline">One Blender repository, automatic updates, and token-based access for free and paid products.</p>
+  <p>EDC Software extensions are delivered through the Blender Extensions repository at
+  <code>{REPOSITORY_URL}</code>. Access tokens tell Blender which products your account can install and update.</p>
+  <div class="actions"><a class="btn" href="{STORE_URL}">Get access →</a><a class="btn ghost" href="./#install">Installation steps</a></div>
+</header>
+
+<section class="notice">
+  <strong>Keep your token private.</strong> Treat it like a password: paste it only into Blender's
+  <strong>Secret</strong> field for the EDC Software repository, and do not post it in screenshots,
+  forum threads, issue reports, or shared project files.
+</section>
+
+<h2>How access works</h2>
+<ol>
+  <li>Choose products in the <a href="{STORE_URL}">EDC Software store</a>. Free products also use this flow so updates stay tied to your token.</li>
+  <li>After checkout or registration, copy the access token shown on the confirmation page.</li>
+  <li>In Blender 4.2 or later, add <code>{REPOSITORY_URL}</code> as a remote repository.</li>
+  <li>Enable <strong>Requires Access Token</strong> and paste your token into the repository <strong>Secret</strong> field.</li>
+  <li>Install your licensed products from <strong>Get Extensions</strong>. Blender will notify you when updates are available.</li>
+</ol>
+
+<div class="callout">
+  <h2>Need another product?</h2>
+  <p>Your repository URL stays the same. Add products through the store, then refresh the EDC Software repository in Blender.</p>
+  <a class="btn" href="{STORE_URL}">Build your bundle →</a>
+</div>
+
+<h2>License terms</h2>
+<div class="terms">
+  <h3>Paid products</h3>
+  <p>Paid purchases include the listed product, repository access, and one year of updates for that product unless a product page states a different term.</p>
+  <h3>Free products</h3>
+  <p>Free products may require registration so the repository can issue a token and deliver updates reliably.</p>
+  <h3>After the update term</h3>
+  <p>Installed versions keep working after an update term ends. Renewing access restores eligibility for newly published updates.</p>
+  <h3>Software license</h3>
+  <p>The extensions are free software under the GNU GPL. Commercial purchases support official builds, packaging, documentation, updates, and support from Engineering Dynamics Company.</p>
+</div>
+
+<h2>Frequently asked questions</h2>
+<div class="faq">
+  <h3>Do I need a separate repository URL for each product?</h3>
+  <p>No. Use <code>{REPOSITORY_URL}</code> for every EDC Software product. Your token controls which products appear.</p>
+  <h3>Where do I paste the token?</h3>
+  <p>Paste it into the <strong>Secret</strong> field after enabling <strong>Requires Access Token</strong> on the EDC Software repository in Blender preferences.</p>
+  <h3>Can I replace an old manual add-on install?</h3>
+  <p>Yes. Disable or remove the old add-on from <strong>Edit → Preferences → Add-ons</strong>, then install the extension version from the EDC Software repository.</p>
+  <h3>Who should I contact for help?</h3>
+  <p>Contact EDC support for licensing, training, and installation assistance.</p>
+</div>
+
+{FOOTER_HTML}
+</main>
+</body>
+</html>
+"""
 
 def render_product_page(pid, c, release):
     """One product page from its content/products/<pid>.toml."""
@@ -640,6 +725,8 @@ def main():
         fh.write("\n")
     with open(os.path.join(out_dir, "index.html"), "w", encoding="utf-8") as fh:
         fh.write(render_landing_page(entries, content, support))
+    with open(os.path.join(out_dir, "access-and-licensing.html"), "w", encoding="utf-8") as fh:
+        fh.write(render_access_licensing_page())
 
     pages_dir = os.path.join(out_dir, "products")
     os.makedirs(pages_dir, exist_ok=True)
