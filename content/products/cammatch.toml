@@ -37,10 +37,12 @@ features = [
 ]
 
 includes = [
-    "Official CamMatch™ Professional software package",
-    "One year of software updates",
+    "GPL software package for CamMatch™ Professional",
+    "One year of authenticated repository access for downloads",
+    "Repository-delivered updates, bug fixes, improvements, and new releases during the access term",
+    "Repository secret associated with the purchaser email",
     "Official documentation",
-    "Instant delivery — your license token arrives the moment you purchase",
+    "Continued use of already-downloaded versions after repository access expires",
 ]
 
 requirements = [

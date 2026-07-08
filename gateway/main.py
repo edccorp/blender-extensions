@@ -93,8 +93,9 @@ except json.JSONDecodeError as exc:
     PRICES_ERROR = f"STRIPE_PRICES is not valid JSON: {exc}"
     print(f"[gateway] ERROR: {PRICES_ERROR}")
 PUBLIC_BASE = os.environ.get("PUBLIC_BASE", "https://extensions.edccorp.com").rstrip("/")
-# Products currently offered free: included with every repository secret, and obtainable
-# without payment via /register (name + email -> instant repository secret).
+ACCESS_URL = f"{PUBLIC_BASE}/access-and-licensing.html"
+# Products currently offered free: included with every token, and obtainable
+# without payment via /register (name + email -> instant token).
 FREE_PRODUCTS = [
     p.strip() for p in os.environ.get("FREE_PRODUCTS", "").split(",") if p.strip()
 ]
@@ -632,7 +633,7 @@ def _welcome_html(result: dict) -> str:
         masked = html.escape(result["token"][:8]) + "…"
         heading = "Purchase added to your repository access"
         token_block = f"""
-<p>You already have an EDC access token (it starts with
+<p>You already have an EDC repository secret (it starts with
 <code>{masked}</code>) — this purchase has been added to it
 automatically, so there is <strong>nothing to change in Blender</strong>:</p>
 <ol>
@@ -641,18 +642,18 @@ automatically, so there is <strong>nothing to change in Blender</strong>:</p>
 <li>Your new product appears — click <b>Install</b>, and make sure the add-on is
 <b>enabled</b> (tick its checkbox under Preferences &rsaquo; Add-ons if its tab doesn't show)</li>
 </ol>
-<p class="muted">Lost your token or using a new computer? Reply to your
+<p class="muted"><strong>Keep your repository secret confidential.</strong> Lost your repository secret or using a new computer? Reply to your
 receipt email or contact Engineering Dynamics Company.</p>"""
     else:
         heading = "Payment received — welcome!"
         token_block = f"""
-<p><strong>Your access token</strong> (click to select, then copy):</p>
+<p><strong>Your repository secret</strong> (click to select, then copy):</p>
 <code class="token">{html.escape(result["token"])}</code>
 <p><strong>Set up Blender</strong> (4.2 or newer):</p>
 <ol>
 <li>Edit &rsaquo; Preferences &rsaquo; Get Extensions &rsaquo; Repositories &rsaquo; <b>+</b> &rsaquo; Add Remote Repository</li>
 <li>URL: <code>https://extensions.edccorp.com/index.json</code></li>
-<li>Tick <b>Requires Access Token</b> and paste your token into <b>Secret</b></li>
+<li>Tick <b>Requires Access Token</b> and paste your repository secret into <b>Secret</b></li>
 <li>Your products appear under Get Extensions — click <b>Install</b></li>
 <li><b>Make sure the add-on is enabled.</b> Installing usually activates it, but if
 the product's sidebar tab doesn't appear, tick its checkbox under
@@ -660,7 +661,7 @@ Edit &rsaquo; Preferences &rsaquo; Add-ons. Updates then arrive automatically.</
 <li><b>Save Preferences</b> (the <b>&#8801;</b> menu at the bottom-left of the Preferences
 window) so you don't have to re-enable it next time you open Blender.</li>
 </ol>
-<p class="muted">Save your token somewhere safe — this page won't show it
+<p class="muted"><strong>Keep your repository secret confidential.</strong> Anyone with it can access your EDC Software repository access. Save it somewhere safe — this page won't show it
 again. Lost it or need help? Reply to your receipt email or contact
 Engineering Dynamics Company.</p>"""
     return f"""<!doctype html>
@@ -690,9 +691,10 @@ Engineering Dynamics Company.</p>"""
 </style></head><body><main><div class="card">
 <h1>{heading}</h1>
 <p class="muted">Engineering Dynamics Company</p>
-<p>Hi {html.escape(result["name"])}, your repository access now includes:</p>
+<p>Hi {html.escape(result["name"])}, your repository access now covers:</p>
 <ul>{items}</ul>
 {token_block}
+<p class="muted">For setup details and repository access terms, see <a href="/access-and-licensing.html">Access and licensing</a>.</p>
 </div></main></body></html>"""
 
 
@@ -773,7 +775,7 @@ def _money(amount: int, currency: str) -> str:
 
 
 def _term_labels() -> tuple[str | None, str | None]:
-    """(compact, prose) labels for the paid update term, or (None, None).
+    """(compact, prose) labels for the paid repository-access term, or (None, None).
 
     Derived from LICENSE_TERM_DAYS so the store copy always matches what
     checkout actually stamps — empty/invalid renders no term (perpetual).
@@ -790,9 +792,9 @@ def _term_labels() -> tuple[str | None, str | None]:
     if days % 365 == 0:
         years = days // 365
         prose = "one year" if years == 1 else f"{years} years"
-        compact = "1‑yr updates" if years == 1 else f"{years}‑yr updates"
+        compact = "1‑yr access" if years == 1 else f"{years}‑yr access"
         return compact, prose
-    return f"{days}‑day updates", f"{days} days"
+    return f"{days}‑day access", f"{days} days"
 
 
 @app.get("/store")
@@ -814,12 +816,15 @@ async def store():
 <span><b>{html.escape(PRODUCT_NAMES[pid])}</b><br>
 <span class="muted">{html.escape(PRODUCT_TAGLINES[pid])}</span></span>
 <span class="price">{price_html}</span></label>"""
+    term_text = (
+        f"a fixed {term_prose} authenticated repository access term"
+        if term_prose else "the repository access shown at checkout"
+    )
     term_note = (
-        f'<p class="muted note">Paid products are a one-time payment that includes '
-        f'{html.escape(term_prose)} of software updates; your add-ons keep working '
-        f'afterward, and you can renew anytime to keep receiving updates. Not an '
-        f'auto-renewing subscription.</p>'
-        if term_prose else ""
+        f'<p class="muted note"><strong>Access term:</strong> Checkout purchases '
+        f'{html.escape(term_text)}, not an auto-renewing subscription. You will receive '
+        f'a repository secret for Blender; your add-ons keep working afterward, and you '
+        f'can renew anytime to restore authenticated repository access.</p>'
     )
     return HTMLResponse(f"""<!doctype html>
 <html lang="en"><head><meta charset="utf-8">
@@ -846,6 +851,8 @@ async def store():
     text-align: right; }}
   .row .price .term {{ font-weight: 400; font-size: .78em; color: var(--muted); }}
   .note {{ font-size: .9em; margin-top: 1rem; }}
+  .notice {{ margin: 1rem 0; padding: .9rem 1rem; border: 1px solid var(--accent);
+    border-radius: 8px; background: color-mix(in srgb, var(--accent) 10%, transparent); }}
   .foot {{ display: flex; align-items: center; margin-top: 1.25rem; }}
   #sum {{ font-size: 1.15rem; font-weight: 700; }}
   button {{ margin-left: auto; background: var(--accent); color: #fff;
@@ -856,9 +863,11 @@ async def store():
 </style></head><body><main><div class="card">
 <h1>EDC Software — Store</h1>
 <p class="muted">Blender add-ons by Engineering Dynamics Company.
-Pick any combination — one checkout, one repository secret for all of it.
+Pick any combination — one checkout, one repository secret for all authenticated repository access.
 Already a customer? Buy with the same email and your existing repository secret is
-updated automatically.</p>
+upgraded automatically.</p>
+<p class="notice"><strong>Need setup or licensing details?</strong>
+<a href="{html.escape(ACCESS_URL)}">Read Access &amp; Licensing</a> for repository-secret setup, term details, and renewal notes.</p>
 <form action="/checkout" method="get">
 {rows}
 <div class="foot"><span id="sum">Select products</span>

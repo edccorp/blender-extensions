@@ -26,9 +26,12 @@ features = [
 ]
 
 includes = [
-    "Official Point Cloud Toolkit™ software package",
-    "One year of software updates",
+    "GPL software package for Point Cloud Toolkit™",
+    "One year of authenticated repository access for downloads",
+    "Repository-delivered updates, bug fixes, improvements, and new releases during the access term",
+    "Repository secret associated with the purchaser email",
     "Official documentation",
+    "Continued use of already-downloaded versions after repository access expires",
 ]
 
 requirements = [

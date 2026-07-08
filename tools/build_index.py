@@ -48,6 +48,7 @@ PRODUCTS = [
 PAGES_BASE = "https://extensions.edccorp.com"
 REPOSITORY_URL = f"{PAGES_BASE}/index.json"
 STORE_URL = f"{PAGES_BASE}/store"
+ACCESS_URL = f"{PAGES_BASE}/access-and-licensing.html"
 
 MIRROR_ZIPS = os.environ.get("MIRROR_ZIPS", "1").lower() not in ("0", "false", "no")
 
@@ -212,12 +213,26 @@ a.btn { display: inline-block; background: var(--accent); color: #fff; border-ra
         padding: .45rem 1.1rem; font-weight: 600; }
 a.btn:hover { text-decoration: none; filter: brightness(1.1); }
 a.btn.ghost { background: transparent; color: var(--accent); border: 1px solid var(--accent); }
+.callout { margin: 1.5rem 0; padding: 1rem 1.2rem; border: 1px solid var(--border);
+           border-left: 5px solid var(--accent); border-radius: 10px; background: var(--card); }
+.callout p { margin: 0; }
 ol li, ul li { margin: .35rem 0; }
 code { background: rgba(127,127,127,.15); padding: .12em .4em; border-radius: 5px; }
 .repo-url { display: block; text-align: center; font-size: 1.05rem; margin: 1rem 0;
             padding: .6rem; background: rgba(127,127,127,.1); border-radius: 8px; }
 footer { margin-top: 3.5rem; padding-top: 1rem; border-top: 1px solid var(--border);
          font-size: .88rem; opacity: .75; text-align: center; }
+
+.notice, .faq, .terms, .callout {
+  background: var(--card); border: 1px solid var(--border); border-radius: 10px;
+  padding: 1rem 1.25rem; margin: 1rem 0;
+}
+.notice { border-left: 4px solid var(--accent); }
+.callout { text-align: center; padding: 1.4rem 1.25rem; }
+.callout h2, .callout h3 { margin-top: 0; border-bottom: 0; padding-bottom: 0; }
+.faq h3, .terms h3 { margin: 1.1rem 0 .25rem; }
+.faq h3:first-child, .terms h3:first-child { margin-top: 0; }
+.terms { font-size: .95rem; }
 .support-cta { text-align: center; margin-top: 2rem; padding: 1.6rem 1.25rem;
                background: var(--card); border: 1px solid var(--border); border-radius: 10px; }
 .support-cta h3 { margin: 0 0 .3rem; font-size: 1.25rem; }
@@ -229,7 +244,8 @@ FOOTER_HTML = """<footer>
 Point Cloud Toolkit\u2122, and Recon Toolkit\u2122 are trademarks of
 Engineering Dynamics Company. Blender\u00ae is a registered trademark of the
 Blender Foundation. The software is free software under the GNU GPL;
-see each product's repository for license details.
+see each product's repository and <a href="access-and-licensing.html">Access
+and licensing</a> for details.
 </footer>"""
 
 # Extra CSS for the detail pages (product pages and the support page), on top
@@ -364,8 +380,12 @@ def render_landing_page(entries, content, support=None):
 <header class="hero">
   <h1>EDC Software</h1>
   <p class="sub">Professional Blender tools by Engineering Dynamics Company</p>
-  <p style="margin-top:1.2rem"><a class="btn" href="{STORE_URL}">Build your bundle \u2192</a>{hero_support_btn}</p>
+  <p style="margin-top:1.2rem"><a class="btn" href="{STORE_URL}">Build your bundle \u2192</a> <a class="btn ghost" href="#install">Add the Blender repository</a>{hero_support_btn}</p>
 </header>
+
+<div class="callout">
+  <p><strong>One repository, your selected tools.</strong> Build a bundle or register for free products, then use the same access-token workflow in Blender to install every product included with your repository access.</p>
+</div>
 
 <div class="grid">
 {cards}
@@ -384,7 +404,7 @@ from the extensions list and updates automatically:</p>
 <p>The repository requires an access token &mdash; every product, free or paid,
 is delivered this way. Enable <strong>Requires Access Token</strong> on the
 repository and paste the token you received into the <strong>Secret</strong>
-field. Your licensed products then appear under <em>Available</em> to install.
+field. Products included with your repository access then appear under <em>Available</em> to install.
 After installing, <strong>make sure the add-on is enabled</strong> &mdash;
 installing usually ticks its checkbox, but if its sidebar tab doesn't appear,
 enable it under <strong>Edit → Preferences → Add-ons</strong>, then
@@ -397,10 +417,11 @@ way (as a manual add-on)? You can disable or remove it anytime from <strong>Edit
 to uninstall. The new extension replaces it.</p>
 
 <h2 id="support">Support</h2>
-<p>Official builds, updates, training, and support for these products are
-provided by <strong>Engineering Dynamics Company</strong> to its customers.
-Visit <a href="https://www.edccorp.com">edccorp.com</a> or contact EDC support
-for licensing, training, and assistance.</p>
+<p>Official builds and updates for these products are provided by
+<strong>Engineering Dynamics Company</strong>. Training and support are available
+when included with your purchase, repository access, or a separate support
+agreement. Visit <a href="https://www.edccorp.com">edccorp.com</a> or contact
+EDC support for licensing, training, and assistance.</p>
 
 {FOOTER_HTML}
 </main>
@@ -408,6 +429,79 @@ for licensing, training, and assistance.</p>
 </html>
 """
 
+
+def render_access_licensing_page():
+    """Standalone access and licensing page for repository tokens and terms."""
+    return f"""<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Access &amp; Licensing — EDC Software</title>
+<style>{SHARED_CSS}{DETAIL_CSS}</style>
+</head>
+<body>
+<main>
+<p class="crumb"><a href="./">← EDC Software</a></p>
+<header class="support-hero">
+  <span class="badge">Access &amp; licensing</span>
+  <h1>Install EDC Software with a repository access token</h1>
+  <p class="tagline">One Blender repository, automatic updates, and token-based access for free and paid products.</p>
+  <p>EDC Software extensions are delivered through the Blender Extensions repository at
+  <code>{REPOSITORY_URL}</code>. Access tokens tell Blender which products your account can install and update.</p>
+  <div class="actions"><a class="btn" href="{STORE_URL}">Get access →</a><a class="btn ghost" href="./#install">Installation steps</a></div>
+</header>
+
+<section class="notice">
+  <strong>Keep your token private.</strong> Treat it like a password: paste it only into Blender's
+  <strong>Secret</strong> field for the EDC Software repository, and do not post it in screenshots,
+  forum threads, issue reports, or shared project files.
+</section>
+
+<h2>How access works</h2>
+<ol>
+  <li>Choose products in the <a href="{STORE_URL}">EDC Software store</a>. Free products also use this flow so updates stay tied to your token.</li>
+  <li>After checkout or registration, copy the access token shown on the confirmation page.</li>
+  <li>In Blender 4.2 or later, add <code>{REPOSITORY_URL}</code> as a remote repository.</li>
+  <li>Enable <strong>Requires Access Token</strong> and paste your token into the repository <strong>Secret</strong> field.</li>
+  <li>Install your licensed products from <strong>Get Extensions</strong>. Blender will notify you when updates are available.</li>
+</ol>
+
+<div class="callout">
+  <h2>Need another product?</h2>
+  <p>Your repository URL stays the same. Add products through the store, then refresh the EDC Software repository in Blender.</p>
+  <a class="btn" href="{STORE_URL}">Build your bundle →</a>
+</div>
+
+<h2>License terms</h2>
+<div class="terms">
+  <h3>Paid products</h3>
+  <p>Paid purchases include the listed product, repository access, and one year of updates for that product unless a product page states a different term.</p>
+  <h3>Free products</h3>
+  <p>Free products may require registration so the repository can issue a token and deliver updates reliably.</p>
+  <h3>After the update term</h3>
+  <p>Installed versions keep working after an update term ends. Renewing access restores eligibility for newly published updates.</p>
+  <h3>Software license</h3>
+  <p>The extensions are free software under the GNU GPL. Commercial purchases support official builds, packaging, documentation, updates, and support from Engineering Dynamics Company.</p>
+</div>
+
+<h2>Frequently asked questions</h2>
+<div class="faq">
+  <h3>Do I need a separate repository URL for each product?</h3>
+  <p>No. Use <code>{REPOSITORY_URL}</code> for every EDC Software product. Your token controls which products appear.</p>
+  <h3>Where do I paste the token?</h3>
+  <p>Paste it into the <strong>Secret</strong> field after enabling <strong>Requires Access Token</strong> on the EDC Software repository in Blender preferences.</p>
+  <h3>Can I replace an old manual add-on install?</h3>
+  <p>Yes. Disable or remove the old add-on from <strong>Edit → Preferences → Add-ons</strong>, then install the extension version from the EDC Software repository.</p>
+  <h3>Who should I contact for help?</h3>
+  <p>Contact EDC support for licensing, training, and installation assistance.</p>
+</div>
+
+{FOOTER_HTML}
+</main>
+</body>
+</html>
+"""
 
 def render_product_page(pid, c, release):
     """One product page from its content/products/<pid>.toml."""
@@ -420,6 +514,10 @@ def render_product_page(pid, c, release):
 
     bmin = html.escape(str(c.get("blender_min", "4.2")))
     donate = ""
+    access_link = (
+        '\n<a class="btn ghost" href="../access-and-licensing.html">'
+        'Repository Access &amp; Licensing</a>'
+    )
     if c.get("donate_url"):
         donate = (f'\n<a class="btn ghost" href="{html.escape(c["donate_url"])}">'
                   f'{esc("donate_label", "Support development ♥")}</a>')
@@ -503,7 +601,7 @@ with automatic update notifications in Blender.</p>"""
     <h1>{esc('name')}</h1>
     <p class="tagline">{esc('tagline')}</p>
     {paragraphs(c.get('pitch', ''))}
-    <div class="actions">{_buy_actions(pid, c.get('price', ''), big=True)}{donate}</div>
+    <div class="actions">{_buy_actions(pid, c.get('price', ''), big=True)}{access_link}{donate}</div>
   </div>
   <div>{hero_img}</div>
 </div>
@@ -517,10 +615,15 @@ with automatic update notifications in Blender.</p>"""
 {features}
 </ul>
 
-<h2>Your purchase includes</h2>
+<h2>What’s included</h2>
+<p>Your purchase provides access to the product’s repository and official
+update channel for the stated update term. It is not a proprietary software
+license; the installed add-on remains free software under the GNU GPL.</p>
 <div class="includes"><ul class="checks">
 {includes}
-</ul></div>
+</ul>
+<p><a href="../access-and-licensing.html">Learn more about repository access &amp; licensing →</a></p>
+</div>
 
 {sections}
 
@@ -532,7 +635,7 @@ with automatic update notifications in Blender.</p>"""
 {version_box}
 
 <h2>Install &amp; updates</h2>
-<p>Your access token is delivered instantly &mdash; it appears on the
+<p>Your repository secret is delivered instantly &mdash; it appears on the
 confirmation page as soon as you check out (and free products issue one after
 a quick sign-up). Then, in Blender {bmin} or newer:</p>
 <ol>
@@ -541,7 +644,7 @@ a quick sign-up). Then, in Blender {bmin} or newer:</p>
 <strong>+ \u2192 Add Remote Repository</strong>, and paste
 <code>{PAGES_BASE}/index.json</code>.</li>
 <li><strong>Enable "Requires Access Token"</strong> on that repository and
-<strong>paste the token you received into the Secret field</strong>.</li>
+<strong>paste the repository secret you received into the Secret field</strong>.</li>
 <li>Your products appear under <em>Available</em> &mdash; click <strong>Install</strong>.</li>
 <li><strong>Make sure the add-on is enabled.</strong> Installing usually ticks its
 checkbox for you, but if the product's sidebar tab doesn't appear, open
@@ -555,7 +658,10 @@ you may have to re-enable the add-on next time you open Blender.</li>
 <p>Upgrading from an older, manually-installed version of this add-on? You can disable or remove
 it anytime from <strong>Edit &rarr; Preferences &rarr; Add-ons</strong> &mdash; search for it,
 untick it to disable, or use <strong>Remove</strong> to uninstall. The new extension replaces it.</p>
-<p>Installed versions keep working even after an update term ends.</p>
+<p>Because the installed add-on is GPL-licensed free software, copies you have
+already received remain yours to use, study, modify, and share under the GPL.
+When the update term ends, repository access for future official builds and
+automatic updates may require renewal.</p>
 
 {FOOTER_HTML}
 </main>
@@ -640,6 +746,8 @@ def main():
         fh.write("\n")
     with open(os.path.join(out_dir, "index.html"), "w", encoding="utf-8") as fh:
         fh.write(render_landing_page(entries, content, support))
+    with open(os.path.join(out_dir, "access-and-licensing.html"), "w", encoding="utf-8") as fh:
+        fh.write(render_access_licensing_page())
 
     pages_dir = os.path.join(out_dir, "products")
     os.makedirs(pages_dir, exist_ok=True)
