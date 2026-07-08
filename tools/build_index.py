@@ -33,6 +33,7 @@ import os
 import shutil
 import sys
 import tomllib
+import urllib.error
 import urllib.request
 import zipfile
 
@@ -84,9 +85,11 @@ def _latest_release(repo):
     try:
         return json.loads(_fetch(f"https://api.github.com/repos/{repo}/releases/latest"))
     except urllib.error.HTTPError as err:
-        if err.code == 404:
-            return None
-        raise
+        print(f"SKIP {repo}: cannot fetch latest release ({err.code} {err.reason})")
+        return None
+    except urllib.error.URLError as err:
+        print(f"SKIP {repo}: cannot fetch latest release ({err.reason})")
+        return None
 
 
 def _manifest_from_zip(data):
@@ -514,6 +517,12 @@ def render_product_page(pid, c, release):
 
     bmin = html.escape(str(c.get("blender_min", "4.2")))
     donate = ""
+    support_notice = ""
+    if c.get("support_notice"):
+        support_notice = (
+            f'<section class="notice"><strong>Compatibility notice:</strong> '
+            f'{html.escape(str(c["support_notice"]))}</section>'
+        )
     access_link = (
         '\n<a class="btn ghost" href="../access-and-licensing.html">'
         'Repository Access &amp; Licensing</a>'
@@ -605,6 +614,8 @@ with automatic update notifications in Blender.</p>"""
   </div>
   <div>{hero_img}</div>
 </div>
+
+{support_notice}
 
 {video_block}
 
