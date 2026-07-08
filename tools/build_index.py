@@ -513,6 +513,10 @@ def render_product_page(pid, c, release):
 
     bmin = html.escape(str(c.get("blender_min", "4.2")))
     donate = ""
+    access_link = (
+        '\n<a class="btn ghost" href="../access-and-licensing.html">'
+        'Repository Access &amp; Licensing</a>'
+    )
     if c.get("donate_url"):
         donate = (f'\n<a class="btn ghost" href="{html.escape(c["donate_url"])}">'
                   f'{esc("donate_label", "Support development ♥")}</a>')
@@ -596,7 +600,7 @@ with automatic update notifications in Blender.</p>"""
     <h1>{esc('name')}</h1>
     <p class="tagline">{esc('tagline')}</p>
     {paragraphs(c.get('pitch', ''))}
-    <div class="actions">{_buy_actions(pid, c.get('price', ''), big=True)}{donate}</div>
+    <div class="actions">{_buy_actions(pid, c.get('price', ''), big=True)}{access_link}{donate}</div>
   </div>
   <div>{hero_img}</div>
 </div>
@@ -610,10 +614,15 @@ with automatic update notifications in Blender.</p>"""
 {features}
 </ul>
 
-<h2>Your purchase includes</h2>
+<h2>What’s included</h2>
+<p>Your purchase provides access to the product’s repository and official
+update channel for the stated update term. It is not a proprietary software
+license; the installed add-on remains free software under the GNU GPL.</p>
 <div class="includes"><ul class="checks">
 {includes}
-</ul></div>
+</ul>
+<p><a href="../access-and-licensing.html">Learn more about repository access &amp; licensing →</a></p>
+</div>
 
 {sections}
 
@@ -625,7 +634,7 @@ with automatic update notifications in Blender.</p>"""
 {version_box}
 
 <h2>Install &amp; updates</h2>
-<p>Your access token is delivered instantly &mdash; it appears on the
+<p>Your repository secret is delivered instantly &mdash; it appears on the
 confirmation page as soon as you check out (and free products issue one after
 a quick sign-up). Then, in Blender {bmin} or newer:</p>
 <ol>
@@ -634,7 +643,7 @@ a quick sign-up). Then, in Blender {bmin} or newer:</p>
 <strong>+ \u2192 Add Remote Repository</strong>, and paste
 <code>{PAGES_BASE}/index.json</code>.</li>
 <li><strong>Enable "Requires Access Token"</strong> on that repository and
-<strong>paste the token you received into the Secret field</strong>.</li>
+<strong>paste the repository secret you received into the Secret field</strong>.</li>
 <li>Your products appear under <em>Available</em> &mdash; click <strong>Install</strong>.</li>
 <li><strong>Make sure the add-on is enabled.</strong> Installing usually ticks its
 checkbox for you, but if the product's sidebar tab doesn't appear, open
@@ -648,7 +657,10 @@ you may have to re-enable the add-on next time you open Blender.</li>
 <p>Upgrading from an older, manually-installed version of this add-on? You can disable or remove
 it anytime from <strong>Edit &rarr; Preferences &rarr; Add-ons</strong> &mdash; search for it,
 untick it to disable, or use <strong>Remove</strong> to uninstall. The new extension replaces it.</p>
-<p>Installed versions keep working even after an update term ends.</p>
+<p>Because the installed add-on is GPL-licensed free software, copies you have
+already received remain yours to use, study, modify, and share under the GPL.
+When the update term ends, repository access for future official builds and
+automatic updates may require renewal.</p>
 
 {FOOTER_HTML}
 </main>
