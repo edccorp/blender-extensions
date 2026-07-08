@@ -2,20 +2,20 @@
 
 A small authentication gateway for the Blender extensions repository at
 extensions.edccorp.com, designed to run on Railway (or any container
-host). Blender sends the per-customer token from the repository's
-"Secret" field as ``Authorization: Bearer <token>`` on every index fetch
+host). Blender sends the per-customer repository secret from the repository's
+"Secret" field as ``Authorization: Bearer <repository-secret>`` on every index fetch
 and download; this app validates it and serves:
 
     GET /                  landing page   (public, proxied from Pages)
-    GET /index.json        extension index (token required)
-    GET /packages/<file>   add-on zips     (token required, streamed from
+    GET /index.json        extension index (repository secret required)
+    GET /packages/<file>   add-on zips     (repository secret required, streamed from
                                             the private GitHub release
                                             asset via GH_TOKEN)
     GET /healthz           liveness probe  (public)
 
 Environment variables:
-    CUSTOMER_TOKENS  JSON object mapping token -> customer. A plain string
-                     label entitles the token to every product:
+    CUSTOMER_TOKENS  JSON object mapping repository secret -> customer. A plain string
+                     label includes every product with that repository access:
                        {"edc_a1b2c3...": "Acme Reconstruction LLC"}
                      An object form scopes it to specific products (ids from
                      the extension manifests: cammatch, hve_toolkit,
@@ -34,7 +34,7 @@ Environment variables:
     CUSTOMERS_TTL    customer-list cache seconds (default 60)
     ADMIN_API_TOKEN  enables POST /admin/customers (used by the purchase
                      automation, e.g. Power Automate) when set; callers
-                     must send it as a Bearer token
+                     must send it as a Bearer repository secret
     ADMIN_GH_TOKEN   fine-grained PAT with Contents:read&write on
                      CUSTOMERS_REPO, used by /admin/customers and the
                      Stripe purchase flow to commit new customers (keep
@@ -42,7 +42,7 @@ Environment variables:
     STRIPE_SECRET_KEY    Stripe API key (a restricted key with read on
                      Checkout Sessions + Products is enough) — enables
                      GET /welcome, the post-payment page that provisions
-                     the buyer's token and shows it on screen
+                     the buyer's repository secret and shows it on screen
     STRIPE_WEBHOOK_SECRET  signing secret (whsec_...) of a Stripe webhook
                      pointed at POST /webhook/stripe for
                      checkout.session.completed — a backstop that
@@ -80,7 +80,7 @@ ADMIN_API_TOKEN = os.environ.get("ADMIN_API_TOKEN", "")
 ADMIN_GH_TOKEN = os.environ.get("ADMIN_GH_TOKEN", "")
 STRIPE_SECRET_KEY = os.environ.get("STRIPE_SECRET_KEY", "")
 STRIPE_WEBHOOK_SECRET = os.environ.get("STRIPE_WEBHOOK_SECRET", "")
-# Default license term (days of update service) for purchases whose Payment
+# Default repository access term (days of update service) for purchases whose Payment
 # Link has no term_days metadata; empty = perpetual.
 LICENSE_TERM_DAYS = os.environ.get("LICENSE_TERM_DAYS", "")
 # Product id -> Stripe Price id, e.g. {"cammatch": "price_1ABC..."}; enables
@@ -93,8 +93,8 @@ except json.JSONDecodeError as exc:
     PRICES_ERROR = f"STRIPE_PRICES is not valid JSON: {exc}"
     print(f"[gateway] ERROR: {PRICES_ERROR}")
 PUBLIC_BASE = os.environ.get("PUBLIC_BASE", "https://extensions.edccorp.com").rstrip("/")
-# Products currently offered free: included with every token, and obtainable
-# without payment via /register (name + email -> instant token).
+# Products currently offered free: included with every repository secret, and obtainable
+# without payment via /register (name + email -> instant repository secret).
 FREE_PRODUCTS = [
     p.strip() for p in os.environ.get("FREE_PRODUCTS", "").split(",") if p.strip()
 ]
@@ -144,14 +144,14 @@ _customers_cache: dict = {"at": 0.0, "data": None, "error": None}
 
 
 async def _customer_tokens() -> dict:
-    """Current token -> customer mapping.
+    """Current repository secret -> customer mapping.
 
     With CUSTOMERS_REPO set, the JSON file is fetched via the GitHub
     contents API using GH_TOKEN and cached for CUSTOMERS_TTL seconds; on
     fetch/parse errors the last good copy keeps serving and the error is
     surfaced on /healthz. CUSTOMER_TOKENS entries are merged underneath,
     so the env var still works as a bootstrap or emergency override —
-    though a token revoked in the file stays active if it also lives in
+    though a repository secret revoked in the file stays active if it also lives in
     the env var, so clear CUSTOMER_TOKENS once you migrate.
     """
     if not CUSTOMERS_REPO:
@@ -214,13 +214,13 @@ def _active(expiry) -> bool:
 
 def _entitled(customer: dict, product_id: str) -> bool:
     if product_id in FREE_PRODUCTS:
-        return True  # free products come with every valid token
+        return True  # free products are included with every valid repository secret
     products = customer["products"]
     return any(k in products and _active(products[k]) for k in ("*", product_id))
 
 
 def _entitlement_state(customer: dict, product_id: str) -> str:
-    """'active', 'expired' (was licensed, term lapsed), or 'none'."""
+    """'active', 'expired' (was included, repository access term lapsed), or 'none'."""
     products = customer["products"]
     expiries = [products[k] for k in ("*", product_id) if k in products]
     if not expiries:
@@ -229,7 +229,7 @@ def _entitlement_state(customer: dict, product_id: str) -> str:
 
 
 async def _authed_customer(request: Request) -> dict | None:
-    """Return {"name", "products"} for the request's Bearer token, or None."""
+    """Return {"name", "products"} for the request's Bearer repository secret, or None."""
     auth = request.headers.get("authorization", "")
     if auth.lower().startswith("bearer "):
         tokens = await _customer_tokens()
@@ -245,10 +245,10 @@ async def _require_customer(request: Request) -> dict:
         raise HTTPException(
             status_code=401,
             detail=(
-                "A valid EDC Software access token is required. In Blender, "
+                "A valid EDC Software repository secret is required. In Blender, "
                 "enable 'Requires Access Token' on the extensions.edccorp.com "
-                "repository and paste your token into the Secret field. "
-                "Contact Engineering Dynamics Company for a token."
+                "repository and paste your repository secret into the Secret field. "
+                "Contact Engineering Dynamics Company for a repository secret."
             ),
             headers={"WWW-Authenticate": "Bearer"},
         )
@@ -323,18 +323,18 @@ async def _write_customers_file(customers: dict, sha: str | None, message: str) 
         raise HTTPException(
             status_code=502, detail=f"GitHub returned {resp.status_code} writing the customer file"
         )
-    _customers_cache["at"] = 0.0  # the new token must work on the very next sync
+    _customers_cache["at"] = 0.0  # the new repository secret must work on the very next sync
 
 
 @app.post("/admin/customers")
 async def admin_add_customer(request: Request):
-    """Provision a customer: generate a token and commit it to CUSTOMERS_REPO.
+    """Provision a customer: generate a repository secret and commit it to CUSTOMERS_REPO.
 
     Called by the purchase automation (Power Automate) after payment is
     approved. Body: {"name": "Acme LLC", "email": "buyer@acme.com",
     "products": ["recon_toolkit"]} — email optional, products optional
     (omitted/empty/"*" = all). Retry-safe: a name that already exists
-    returns the existing entry instead of minting a duplicate token.
+    returns the existing entry instead of minting a duplicate repository secret.
     """
     if not (ADMIN_API_TOKEN and ADMIN_GH_TOKEN and CUSTOMERS_REPO):
         raise HTTPException(
@@ -413,7 +413,7 @@ async def admin_add_customer(request: Request):
 
 
 # --------------------------------------------------------------------------
-# Stripe purchase flow: Payment Link -> /welcome (token on screen), with
+# Stripe purchase flow: Payment Link -> /welcome (repository secret on screen), with
 # /webhook/stripe as a backstop if the buyer never reaches the redirect.
 
 async def _stripe_checkout_session(session_id: str) -> dict:
@@ -470,7 +470,7 @@ def _session_products(session: dict) -> list[str]:
 
 
 def _session_term_days(session: dict) -> int | None:
-    """License term for a purchase, in days (None = perpetual).
+    """Repository access term for a purchase, in days (None = perpetual).
 
     From a term_days metadata key on the Payment Link (copied onto the
     session), else the LICENSE_TERM_DAYS env default.
@@ -487,7 +487,7 @@ def _session_term_days(session: dict) -> int | None:
         raise HTTPException(
             status_code=500,
             detail=(
-                "This purchase is missing license-term information. Your payment "
+                "This purchase is missing repository-access-term information. Your payment "
                 "went through — contact Engineering Dynamics Company and your "
                 "access will be set up right away."
             ),
@@ -532,11 +532,11 @@ def _merge_products(existing: dict, ids: list, term_days: int | None) -> dict:
 async def _provision_purchase(session: dict) -> dict:
     """Turn a paid checkout session into a customer entry, exactly once.
 
-    A returning buyer (matched by email) keeps their existing token and
+    A returning buyer (matched by email) keeps their existing repository secret and
     has the purchased products added to it — Blender holds one Secret per
-    repository, so a second token would strand their first purchase.
-    Result flags: merged (this purchase extended an existing license, so
-    the UI must not reveal the full token) and already_processed (this
+    repository, so a second repository secret would strand their first purchase.
+    Result flags: merged (this purchase extended existing repository access, so
+    the UI must not reveal the full repository secret) and already_processed (this
     session was provisioned before — welcome revisit or webhook replay).
     """
     details = session.get("customer_details") or {}
@@ -571,7 +571,7 @@ async def _provision_purchase(session: dict) -> dict:
                         value["stripe_sessions"] = [*_entry_sessions(value), session_id]
                         value.pop("stripe_session", None)
                         entry_name = value.get("name", name)
-                        await _write_customers_file(customers, sha, f"Extend license: {entry_name}")
+                        await _write_customers_file(customers, sha, f"Extend repository access: {entry_name}")
                         print(f"[gateway] stripe: extended {entry_name} <{email}> with {', '.join(ids)}")
                         return {"token": token, "name": entry_name, "products": value["products"],
                                 "merged": True, "already_processed": False}
@@ -627,10 +627,10 @@ def _welcome_html(result: dict) -> str:
         for p, exp in products.items()
     )
     if result["merged"]:
-        # Never print the full existing token on an upgrade: purchases only
+        # Never print the full existing repository secret on an upgrade: purchases only
         # prove control of a card, not ownership of this customer's email.
         masked = html.escape(result["token"][:8]) + "…"
-        heading = "Purchase added to your license"
+        heading = "Purchase added to your repository access"
         token_block = f"""
 <p>You already have an EDC access token (it starts with
 <code>{masked}</code>) — this purchase has been added to it
@@ -690,7 +690,7 @@ Engineering Dynamics Company.</p>"""
 </style></head><body><main><div class="card">
 <h1>{heading}</h1>
 <p class="muted">Engineering Dynamics Company</p>
-<p>Hi {html.escape(result["name"])}, your license now covers:</p>
+<p>Hi {html.escape(result["name"])}, your repository access now includes:</p>
 <ul>{items}</ul>
 {token_block}
 </div></main></body></html>"""
@@ -726,7 +726,7 @@ async def stripe_webhook(request: Request):
         metadata = obj.get("metadata") or {}
         if metadata.get("donation"):
             # Donations (pay-what-you-want links tagged donation=1) carry no
-            # license — acknowledge and skip provisioning.
+            # repository access — acknowledge and skip provisioning.
             donor = (obj.get("customer_details") or {}).get("email", "someone kind")
             print(f"[gateway] stripe: donation received from {donor} — thank you")
             return {"received": True}
@@ -856,9 +856,9 @@ async def store():
 </style></head><body><main><div class="card">
 <h1>EDC Software — Store</h1>
 <p class="muted">Blender add-ons by Engineering Dynamics Company.
-Pick any combination — one checkout, one license token for all of it.
-Already a customer? Buy with the same email and your existing token is
-upgraded automatically.</p>
+Pick any combination — one checkout, one repository secret for all of it.
+Already a customer? Buy with the same email and your existing repository secret is
+updated automatically.</p>
 <form action="/checkout" method="get">
 {rows}
 <div class="foot"><span id="sum">Select products</span>
@@ -970,7 +970,7 @@ Enter your details and your personal access token is created instantly.</p>
 
 @app.get("/register")
 async def register(request: Request):
-    """Free-product registration: name + email -> instant token, no payment."""
+    """Free-product registration: name + email -> instant repository secret, no payment."""
     if not (ADMIN_GH_TOKEN and CUSTOMERS_REPO and FREE_PRODUCTS) or FREE_TERM_ERROR:
         raise HTTPException(status_code=503, detail="free registration is not configured")
     q = request.query_params
@@ -988,8 +988,8 @@ async def register(request: Request):
     customers, sha = await _read_customers_file()
     for token, value in customers.items():
         if isinstance(value, dict) and value.get("email", "").strip().lower() == email.lower():
-            # Existing customer: free products already come with their token.
-            # Never re-display a token to someone who only proved they can
+            # Existing customer: free products are already included with their repository secret.
+            # Never re-display a repository secret to someone who only proved they can
             # type an email address.
             return HTMLResponse(f"""<h1>You're already set up</h1>
 <p>The token you already have (starts with <code>{html.escape(token[:8])}…</code>)
@@ -1133,7 +1133,7 @@ async def package(filename: str, request: Request):
             "versions keep working, but updates require a renewal. Visit "
             "https://extensions.edccorp.com or contact Engineering Dynamics Company."
             if state == "expired"
-            else f"This token is not licensed for {product_id}. "
+            else f"This repository secret does not include access to {product_id}. "
             "Contact Engineering Dynamics Company to add it."
         )
         raise HTTPException(status_code=403, detail=detail)
