@@ -631,9 +631,9 @@ def _welcome_html(result: dict) -> str:
         # Never print the full existing token on an upgrade: purchases only
         # prove control of a card, not ownership of this customer's email.
         masked = html.escape(result["token"][:8]) + "…"
-        heading = "Purchase added to your license"
+        heading = "Purchase added to your repository access"
         token_block = f"""
-<p>You already have an EDC access token (it starts with
+<p>You already have an EDC repository secret (it starts with
 <code>{masked}</code>) — this purchase has been added to it
 automatically, so there is <strong>nothing to change in Blender</strong>:</p>
 <ol>
@@ -642,18 +642,18 @@ automatically, so there is <strong>nothing to change in Blender</strong>:</p>
 <li>Your new product appears — click <b>Install</b>, and make sure the add-on is
 <b>enabled</b> (tick its checkbox under Preferences &rsaquo; Add-ons if its tab doesn't show)</li>
 </ol>
-<p class="muted">Lost your token or using a new computer? Reply to your
+<p class="muted"><strong>Keep your repository secret confidential.</strong> Lost your repository secret or using a new computer? Reply to your
 receipt email or contact Engineering Dynamics Company.</p>"""
     else:
         heading = "Payment received — welcome!"
         token_block = f"""
-<p><strong>Your access token</strong> (click to select, then copy):</p>
+<p><strong>Your repository secret</strong> (click to select, then copy):</p>
 <code class="token">{html.escape(result["token"])}</code>
 <p><strong>Set up Blender</strong> (4.2 or newer):</p>
 <ol>
 <li>Edit &rsaquo; Preferences &rsaquo; Get Extensions &rsaquo; Repositories &rsaquo; <b>+</b> &rsaquo; Add Remote Repository</li>
 <li>URL: <code>https://extensions.edccorp.com/index.json</code></li>
-<li>Tick <b>Requires Access Token</b> and paste your token into <b>Secret</b></li>
+<li>Tick <b>Requires Access Token</b> and paste your repository secret into <b>Secret</b></li>
 <li>Your products appear under Get Extensions — click <b>Install</b></li>
 <li><b>Make sure the add-on is enabled.</b> Installing usually activates it, but if
 the product's sidebar tab doesn't appear, tick its checkbox under
@@ -661,7 +661,7 @@ Edit &rsaquo; Preferences &rsaquo; Add-ons. Updates then arrive automatically.</
 <li><b>Save Preferences</b> (the <b>&#8801;</b> menu at the bottom-left of the Preferences
 window) so you don't have to re-enable it next time you open Blender.</li>
 </ol>
-<p class="muted">Save your token somewhere safe — this page won't show it
+<p class="muted"><strong>Keep your repository secret confidential.</strong> Anyone with it can access your EDC Software repository access. Save it somewhere safe — this page won't show it
 again. Lost it or need help? Reply to your receipt email or contact
 Engineering Dynamics Company.</p>"""
     return f"""<!doctype html>
@@ -691,9 +691,10 @@ Engineering Dynamics Company.</p>"""
 </style></head><body><main><div class="card">
 <h1>{heading}</h1>
 <p class="muted">Engineering Dynamics Company</p>
-<p>Hi {html.escape(result["name"])}, your license now covers:</p>
+<p>Hi {html.escape(result["name"])}, your repository access now covers:</p>
 <ul>{items}</ul>
 {token_block}
+<p class="muted">For setup details and repository access terms, see <a href="/access-and-licensing.html">Access and licensing</a>.</p>
 </div></main></body></html>"""
 
 
