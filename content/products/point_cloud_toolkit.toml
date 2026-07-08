@@ -36,6 +36,7 @@ includes = [
 
 requirements = [
     "Blender 4.2 or newer",
+    "Not fully supported in Blender 5.1 at this time",
     "Optional dependencies — Open3D (3D reconstruction), pye57 (E57), laspy (LAZ) — install themselves from the panel when first needed",
 ]
 
