@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Manage customer tokens for the EDC Software extensions gateway.
+"""Manage customer repository secrets for the EDC Software extensions gateway.
 
 The customer list lives as customers.json in a private GitHub repo; the
 gateway (extensions.edccorp.com) re-reads it within about a minute of any
@@ -21,7 +21,7 @@ Usage:
     python tools/customer.py set-products "Smith Engineering" --products "*"
     python tools/customer.py revoke "Acme Reconstruction LLC"
 
-`add` prints the new token exactly once — send it to the customer, it is
+`add` prints the new repository secret exactly once — send it to the customer, it is
 not stored anywhere except the customers file.
 """
 
@@ -72,11 +72,11 @@ def explain_http_error(exc: urllib.error.HTTPError, writing: bool) -> None:
         403: (
             "the PAT is not allowed to write here. On the fine-grained PAT page, "
             "set Repository permissions > Contents to 'Read and write', make sure "
-            f"{REPO} is in the token's repository list, and click Update"
+            f"{REPO} is in the PAT's repository list, and click Update"
         ),
         404: (
             f"GitHub can't see {REPO} with this PAT — check the repo exists with "
-            "exactly that name and is in the token's repository list"
+            "exactly that name and is in the PAT's repository list"
         ),
         409: "the file changed on GitHub while this command ran — just re-run it",
     }
@@ -134,7 +134,7 @@ def products_of(value) -> list[str]:
 
 
 def find(customers: dict, key: str) -> list[str]:
-    """Match by exact token first, then case-insensitive customer name."""
+    """Match by exact repository secret first, then case-insensitive customer name."""
     if key in customers:
         return [key]
     return [t for t, v in customers.items() if name_of(v).lower() == key.lower()]
@@ -169,10 +169,10 @@ def entry_for(name: str, products: list[str] | None, expires: str | None = None)
 def resolve_one(customers: dict, key: str) -> str:
     matches = find(customers, key)
     if not matches:
-        die(f"no customer matches {key!r} (by token or name)")
+        die(f"no customer matches {key!r} (by repository secret or name)")
     if len(matches) > 1:
         listing = "\n".join(f"  {t}  {name_of(customers[t])}" for t in matches)
-        die(f"{key!r} matches multiple customers — use the token instead:\n{listing}")
+        die(f"{key!r} matches multiple customers — use the repository secret instead:\n{listing}")
     return matches[0]
 
 
@@ -187,11 +187,11 @@ def cmd_add(args) -> None:
     if expires:
         shown += f", updates through {expires}"
     print(f"Added {args.name} ({shown}). Live on the gateway within a minute.")
-    print(f"\n  Token (send to customer, shown only once):\n\n    {token}\n")
+    print(f"\n  Repository secret (send to customer, shown only once):\n\n    {token}\n")
     print("Blender setup for the customer: Preferences > Get Extensions >")
     print("Repositories > + Add Remote Repository >")
     print("  URL:    https://extensions.edccorp.com/index.json")
-    print("  tick 'Requires Access Token', paste the token into Secret")
+    print("  tick 'Requires Access Token', paste the repository secret into Secret")
 
 
 def cmd_list(args) -> None:
@@ -219,7 +219,7 @@ def cmd_set_products(args) -> None:
         customers[token] = entry_for(name, products, expires)
     save(customers, sha, f"Set products for {name}: {args.products or '*'}")
     shown = ", ".join(products_of(customers[token]))
-    print(f"{name} is now licensed for: {shown} (live within a minute)")
+    print(f"{name} now has repository access to: {shown} (live within a minute)")
 
 
 def cmd_revoke(args) -> None:
@@ -235,23 +235,23 @@ def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     sub = parser.add_subparsers(dest="command", required=True)
 
-    p = sub.add_parser("add", help="add a customer and print their new token")
+    p = sub.add_parser("add", help="add a customer and print their new repository secret")
     p.add_argument("name", help='customer label, e.g. "Acme Reconstruction LLC"')
     p.add_argument("--products", help=f"comma-separated ids ({', '.join(PRODUCT_IDS)}); omit for all")
     p.add_argument("--expires", help="YYYY-MM-DD — updates stop after this date; omit for perpetual")
     p.set_defaults(func=cmd_add)
 
-    p = sub.add_parser("list", help="list customers, tokens, and entitlements")
+    p = sub.add_parser("list", help="list customers, repository secrets, and included products")
     p.set_defaults(func=cmd_list)
 
-    p = sub.add_parser("set-products", help="change a customer's licensed products")
-    p.add_argument("customer", help="customer name or token")
+    p = sub.add_parser("set-products", help="change the products included with a customer's repository access")
+    p.add_argument("customer", help="customer name or repository secret")
     p.add_argument("--products", help="comma-separated ids, or * for all")
     p.add_argument("--expires", help="YYYY-MM-DD — updates stop after this date; omit for perpetual")
     p.set_defaults(func=cmd_set_products)
 
     p = sub.add_parser("revoke", help="remove a customer's access")
-    p.add_argument("customer", help="customer name or token")
+    p.add_argument("customer", help="customer name or repository secret")
     p.set_defaults(func=cmd_revoke)
 
     args = parser.parse_args()

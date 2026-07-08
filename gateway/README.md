@@ -1,17 +1,17 @@
 # EDC Software extensions gateway (Railway)
 
 Per-customer authentication for the Blender extensions channel. Blender
-sends the token from the repository's **Secret** field as an
+sends the repository secret from the repository's **Secret** field as an
 `Authorization: Bearer` header on every index fetch and download; this
 FastAPI service validates it, serves the index, and streams the add-on
 zips **directly from the private GitHub release assets** — no public
 copies anywhere.
 
 ```
-Blender ──token──▶ extensions.edccorp.com (this gateway on Railway)
+Blender ──repository secret──▶ extensions.edccorp.com (this gateway on Railway)
                      ├── /            landing page   (public)
-                     ├── /index.json  index          (token required)
-                     └── /packages/*  zips           (token required,
+                     ├── /index.json  index          (repository secret required)
+                     └── /packages/*  zips           (repository secret required,
                                                       streamed from private
                                                       GitHub releases)
 ```
@@ -25,21 +25,21 @@ Blender ──token──▶ extensions.edccorp.com (this gateway on Railway)
 2. **Set environment variables** (service → Variables):
    - `GH_TOKEN` — a fine-grained PAT with **Contents: read** on the four
      product repos (same scope as the `PRODUCTS_TOKEN` Actions secret).
-   - `CUSTOMER_TOKENS` — JSON mapping token → customer. A plain label
-     entitles the token to **every** product; an object form scopes it to
+   - `CUSTOMER_TOKENS` — JSON mapping repository secret → customer. A plain label
+     includes **every** product with that repository access; an object form scopes it to
      specific products (each customer's Blender then only sees and can
-     download what they are licensed for):
+     download the products included with their repository access):
      ```json
      {"edc_Xk39fj2mQ8vL5nR7tY1wZ4": "Acme Reconstruction LLC",
       "edc_P2hN8cV6bM4xK9sD3fG7jQ": {"name": "Smith Engineering",
                                      "products": ["recon_toolkit", "point_cloud_toolkit"]}}
      ```
      Product ids: `cammatch`, `hve_toolkit`, `point_cloud_toolkit`,
-     `recon_toolkit` (or `"*"` for all). Generate tokens with:
+     `recon_toolkit` (or `"*"` for all). Generate repository secrets with:
      `python -c "import secrets; print('edc_' + secrets.token_urlsafe(18))"`
    - `CUSTOMERS_REPO` (optional, recommended once you have more than a
      couple of customers) — see **Managing customers at scale** below;
-     tokens then live in a private repo instead of this variable.
+     repository secrets then live in a private repo instead of this variable.
 3. **Attach the domain**: service → Settings → Networking → Custom Domain →
    `extensions.edccorp.com`. Railway shows a CNAME target; update the DNS
    record for `extensions` (currently pointing at `edccorp.github.io`) to
@@ -54,14 +54,14 @@ Blender ──token──▶ extensions.edccorp.com (this gateway on Railway)
 ## Customer instructions
 
 Preferences → Get Extensions → Repositories → `extensions.edccorp.com` →
-tick **Requires Access Token** → paste the customer's token into
+tick **Requires Access Token** → paste the customer's repository secret into
 **Secret**. Everything else (install, update notifications) works as
 before — unauthenticated clients get a 401 with a friendly message.
 
 ## Managing customers at scale (recommended)
 
 Editing `CUSTOMER_TOKENS` in the Railway dashboard is fine for one or two
-tokens, but past that, move the list into a **private GitHub repo**. The
+repository secrets, but past that, move the list into a **private GitHub repo**. The
 gateway re-reads the file within a minute of any change — no redeploy —
 and the repo's commit history is a free audit trail of every add, scope
 change, and revocation.
@@ -76,7 +76,7 @@ One-time setup:
 4. For the management CLI, create a **second** fine-grained PAT with
    **Contents: read & write** on `edc-extensions-customers` only, and set it on your
    machine: `setx CUSTOMERS_ADMIN_TOKEN github_pat_...`
-5. Migrate any tokens out of `CUSTOMER_TOKENS` (re-add them via the CLI),
+5. Migrate any repository secrets out of `CUSTOMER_TOKENS` (re-add them via the CLI),
    then set `CUSTOMER_TOKENS={}` — entries left there stay active even if
    revoked in the file, so don't keep both.
 
@@ -90,11 +90,11 @@ python tools/customer.py set-products "Smith Engineering" --products "*"
 python tools/customer.py revoke "Acme Reconstruction LLC"
 ```
 
-`add` generates the token, commits the change, and prints the token once
+`add` generates the repository secret, commits the change, and prints the secret once
 along with the customer-facing Blender setup steps. Changes go live on
 the gateway within ~60 seconds (`CUSTOMERS_TTL`). You can also edit
 `customers.json` directly on github.com — same format as
-`CUSTOMER_TOKENS`, token → label or `{"name", "products"}` object.
+`CUSTOMER_TOKENS`, repository secret → label or `{"name", "products"}` object.
 
 - **Revoke**: their Blender shows an authentication error on the next
   sync; already-installed add-ons keep working but stop updating.
@@ -108,13 +108,13 @@ the gateway within ~60 seconds (`CUSTOMERS_TTL`). You can also edit
 
 A purchase provisions itself: the buyer pays on a Stripe-hosted checkout
 page, gets redirected to `/welcome`, and the gateway verifies the payment
-with Stripe, commits them to the customers repo, and shows their token on
+with Stripe, commits them to the customers repo, and shows their repository secret on
 screen — seconds after paying, no human involved. A signed webhook
-provisions as a backstop if they close the browser early (same token,
+provisions as a backstop if they close the browser early (same repository secret,
 never a duplicate — provisioning is keyed to the checkout session).
 
 ```
-Payment Link ──paid──▶ /welcome?session_id=...   (token on screen)
+Payment Link ──paid──▶ /welcome?session_id=...   (repository secret on screen)
                 └─────▶ /webhook/stripe          (backstop, signature-verified)
 ```
 
@@ -142,7 +142,7 @@ account for EDC — dashboard account picker → Create new account):
      admin API; already set if you configured that).
 5. **Test in test mode first**: Stripe's test-mode keys + a test-mode
    payment link, card `4242 4242 4242 4242`, any future expiry/CVC. Check
-   the welcome page shows a token and the customer appears in
+   the welcome page shows a repository secret and the customer appears in
    `customers.json`. Then swap the live keys into Railway.
 
 Put the payment links on the landing page / your site — they *are* the
@@ -151,9 +151,9 @@ Stripe receipt email is the customer's proof of purchase; the
 `customers.json` entry records their checkout session ids).
 
 **Repeat purchases**: a buyer whose checkout email matches an existing
-customer keeps their token — the new product is added to it, and the
+customer keeps their repository secret — the new product is added to it, and the
 welcome page says "nothing to change in Blender, just refresh" (showing
-only a masked token prefix; the full token is never re-displayed). A
+only a masked repository secret prefix; the full repository secret is never re-displayed). A
 different email means a fresh customer entry — if someone buys twice
 under two emails, merge by hand: `set-products` on the entry to keep,
 `revoke` the other.
@@ -163,7 +163,7 @@ under two emails, merge by hand: `set-products` on the entry to keep,
 `https://extensions.edccorp.com/store` lets a customer tick any set of
 products and pay for them in a single Stripe Checkout — the gateway
 creates the checkout session itself with the right `products` metadata,
-so the purchase flows through the same welcome/token/merge logic as the
+so the purchase flows through the same welcome/repository-secret/merge logic as the
 payment links. Promotion codes are enabled at checkout. To turn it on:
 
 1. Railway → Variables: `STRIPE_PRICES` — JSON mapping product id to the
@@ -179,7 +179,7 @@ payment links. Promotion codes are enabled at checkout. To turn it on:
 3. Prices display straight from Stripe (cached an hour), so a price
    change in the dashboard is the only edit you ever make.
 
-`LICENSE_TERM_DAYS` (if set) is stamped on store checkouts as the term,
+`LICENSE_TERM_DAYS` (if set) is stamped on store checkouts as the repository access term,
 same as `term_days` metadata on payment links. Individual payment links
 keep working alongside the store.
 
@@ -188,9 +188,9 @@ keep working alongside the store.
 `FREE_PRODUCTS` (Railway variable, comma-separated ids, e.g.
 `hve_toolkit,recon_toolkit`) marks products as free:
 
-- They come with **every** valid token automatically.
+- They come with **every** valid repository secret automatically.
 - `/register` hands them out without payment — name + email → instant
-  token (each registration is a commit to the customers repo, so the
+  repository secret (each registration is a commit to the customers repo, so the
   free user list doubles as a mailing list). The store and `/checkout`
   route free-only selections there; mixed free+paid selections still go
   through one Stripe checkout.
@@ -201,7 +201,7 @@ keep working alongside the store.
   in Stripe + `STRIPE_PRICES`, set its `price` in `content/products/`.
   Already-registered users keep whatever term their entry carries.
 
-## Time-limited licenses (one year of updates)
+## Time-limited repository access (one year of updates)
 
 To sell "the add-on plus N days of updates", add a second metadata key
 to the Payment Link: `term_days` = `365`. The customer's entry then
@@ -236,7 +236,7 @@ updates" message.
 ## Alternative: Microsoft Forms + Power Automate (manual approval)
 
 The gateway has a provisioning API so a purchase can turn into a working
-token without touching the CLI:
+repository secret without touching the CLI:
 
 ```
 POST https://extensions.edccorp.com/admin/customers
@@ -254,7 +254,7 @@ entry instead of minting a duplicate.
 One-time setup:
 
 1. Railway → Variables: add `ADMIN_API_TOKEN` (generate like a customer
-   token: `python -c "import secrets; print('adm_' + secrets.token_urlsafe(24))"`)
+   repository secret: `python -c "import secrets; print('adm_' + secrets.token_urlsafe(24))"`)
    and `ADMIN_GH_TOKEN` (a fine-grained PAT with **Contents: read & write**
    on the customers repo — same scope as the CLI's `CUSTOMERS_ADMIN_TOKEN`;
    keep `GH_TOKEN` itself read-only).
@@ -273,9 +273,9 @@ One-time setup:
      the form fields; map the product choice to ids `cammatch`,
      `hve_toolkit`, `point_cloud_toolkit`, `recon_toolkit`, or `*`.
    - *Parse JSON* on the response, then *Send an email (V2)* to the
-     customer containing `token` and the Blender steps (add repository
+     customer containing the repository secret (`token`) and the Blender steps (add repository
      `https://extensions.edccorp.com/index.json`, tick *Requires Access
-     Token*, paste the token into *Secret*).
+     Token*, paste the repository secret into *Secret*).
 
 Notes: the HTTP action needs a Power Automate premium license; if that's
 a blocker, skip the HTTP step and run `tools/customer.py add` yourself —
