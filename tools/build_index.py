@@ -212,6 +212,9 @@ a.btn { display: inline-block; background: var(--accent); color: #fff; border-ra
         padding: .45rem 1.1rem; font-weight: 600; }
 a.btn:hover { text-decoration: none; filter: brightness(1.1); }
 a.btn.ghost { background: transparent; color: var(--accent); border: 1px solid var(--accent); }
+.callout { margin: 1.5rem 0; padding: 1rem 1.2rem; border: 1px solid var(--border);
+           border-left: 5px solid var(--accent); border-radius: 10px; background: var(--card); }
+.callout p { margin: 0; }
 ol li, ul li { margin: .35rem 0; }
 code { background: rgba(127,127,127,.15); padding: .12em .4em; border-radius: 5px; }
 .repo-url { display: block; text-align: center; font-size: 1.05rem; margin: 1rem 0;
@@ -364,8 +367,12 @@ def render_landing_page(entries, content, support=None):
 <header class="hero">
   <h1>EDC Software</h1>
   <p class="sub">Professional Blender tools by Engineering Dynamics Company</p>
-  <p style="margin-top:1.2rem"><a class="btn" href="{STORE_URL}">Build your bundle \u2192</a>{hero_support_btn}</p>
+  <p style="margin-top:1.2rem"><a class="btn" href="{STORE_URL}">Build your bundle \u2192</a> <a class="btn ghost" href="#install">Add the Blender repository</a>{hero_support_btn}</p>
 </header>
+
+<div class="callout">
+  <p><strong>One repository, your selected tools.</strong> Build a bundle or register for free products, then use the same access-token workflow in Blender to install every product included with your repository access.</p>
+</div>
 
 <div class="grid">
 {cards}
@@ -384,7 +391,7 @@ from the extensions list and updates automatically:</p>
 <p>The repository requires an access token &mdash; every product, free or paid,
 is delivered this way. Enable <strong>Requires Access Token</strong> on the
 repository and paste the token you received into the <strong>Secret</strong>
-field. Your licensed products then appear under <em>Available</em> to install.
+field. Products included with your repository access then appear under <em>Available</em> to install.
 After installing, <strong>make sure the add-on is enabled</strong> &mdash;
 installing usually ticks its checkbox, but if its sidebar tab doesn't appear,
 enable it under <strong>Edit → Preferences → Add-ons</strong>, then
@@ -397,10 +404,11 @@ way (as a manual add-on)? You can disable or remove it anytime from <strong>Edit
 to uninstall. The new extension replaces it.</p>
 
 <h2 id="support">Support</h2>
-<p>Official builds, updates, training, and support for these products are
-provided by <strong>Engineering Dynamics Company</strong> to its customers.
-Visit <a href="https://www.edccorp.com">edccorp.com</a> or contact EDC support
-for licensing, training, and assistance.</p>
+<p>Official builds and updates for these products are provided by
+<strong>Engineering Dynamics Company</strong>. Training and support are available
+when included with your purchase, repository access, or a separate support
+agreement. Visit <a href="https://www.edccorp.com">edccorp.com</a> or contact
+EDC support for licensing, training, and assistance.</p>
 
 {FOOTER_HTML}
 </main>
