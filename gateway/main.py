@@ -93,6 +93,7 @@ except json.JSONDecodeError as exc:
     PRICES_ERROR = f"STRIPE_PRICES is not valid JSON: {exc}"
     print(f"[gateway] ERROR: {PRICES_ERROR}")
 PUBLIC_BASE = os.environ.get("PUBLIC_BASE", "https://extensions.edccorp.com").rstrip("/")
+ACCESS_URL = f"{PUBLIC_BASE}/access-and-licensing.html"
 # Products currently offered free: included with every token, and obtainable
 # without payment via /register (name + email -> instant token).
 FREE_PRODUCTS = [
@@ -773,7 +774,7 @@ def _money(amount: int, currency: str) -> str:
 
 
 def _term_labels() -> tuple[str | None, str | None]:
-    """(compact, prose) labels for the paid update term, or (None, None).
+    """(compact, prose) labels for the paid repository-access term, or (None, None).
 
     Derived from LICENSE_TERM_DAYS so the store copy always matches what
     checkout actually stamps — empty/invalid renders no term (perpetual).
@@ -790,9 +791,9 @@ def _term_labels() -> tuple[str | None, str | None]:
     if days % 365 == 0:
         years = days // 365
         prose = "one year" if years == 1 else f"{years} years"
-        compact = "1‑yr updates" if years == 1 else f"{years}‑yr updates"
+        compact = "1‑yr access" if years == 1 else f"{years}‑yr access"
         return compact, prose
-    return f"{days}‑day updates", f"{days} days"
+    return f"{days}‑day access", f"{days} days"
 
 
 @app.get("/store")
@@ -814,12 +815,15 @@ async def store():
 <span><b>{html.escape(PRODUCT_NAMES[pid])}</b><br>
 <span class="muted">{html.escape(PRODUCT_TAGLINES[pid])}</span></span>
 <span class="price">{price_html}</span></label>"""
+    term_text = (
+        f"a fixed {term_prose} authenticated repository access term"
+        if term_prose else "the repository access shown at checkout"
+    )
     term_note = (
-        f'<p class="muted note">Paid products are a one-time payment that includes '
-        f'{html.escape(term_prose)} of software updates; your add-ons keep working '
-        f'afterward, and you can renew anytime to keep receiving updates. Not an '
-        f'auto-renewing subscription.</p>'
-        if term_prose else ""
+        f'<p class="muted note"><strong>Access term:</strong> Checkout purchases '
+        f'{html.escape(term_text)}, not an auto-renewing subscription. You will receive '
+        f'a repository secret for Blender; your add-ons keep working afterward, and you '
+        f'can renew anytime to restore authenticated repository access.</p>'
     )
     return HTMLResponse(f"""<!doctype html>
 <html lang="en"><head><meta charset="utf-8">
@@ -846,6 +850,8 @@ async def store():
     text-align: right; }}
   .row .price .term {{ font-weight: 400; font-size: .78em; color: var(--muted); }}
   .note {{ font-size: .9em; margin-top: 1rem; }}
+  .notice {{ margin: 1rem 0; padding: .9rem 1rem; border: 1px solid var(--accent);
+    border-radius: 8px; background: color-mix(in srgb, var(--accent) 10%, transparent); }}
   .foot {{ display: flex; align-items: center; margin-top: 1.25rem; }}
   #sum {{ font-size: 1.15rem; font-weight: 700; }}
   button {{ margin-left: auto; background: var(--accent); color: #fff;
@@ -856,9 +862,11 @@ async def store():
 </style></head><body><main><div class="card">
 <h1>EDC Software — Store</h1>
 <p class="muted">Blender add-ons by Engineering Dynamics Company.
-Pick any combination — one checkout, one license token for all of it.
-Already a customer? Buy with the same email and your existing token is
+Pick any combination — one checkout, one repository secret for all authenticated repository access.
+Already a customer? Buy with the same email and your existing repository secret is
 upgraded automatically.</p>
+<p class="notice"><strong>Need setup or licensing details?</strong>
+<a href="{html.escape(ACCESS_URL)}">Read Access &amp; Licensing</a> for repository-secret setup, term details, and renewal notes.</p>
 <form action="/checkout" method="get">
 {rows}
 <div class="foot"><span id="sum">Select products</span>
