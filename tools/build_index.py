@@ -44,7 +44,20 @@ PRODUCTS = [
     "edccorp/HVEToolkit",
     "edccorp/PointCloudToolkit",
     "edccorp/ReconToolkit",
+    "edccorp/EDCVisibilityToolkit",
+    "edccorp/EDCVideoForensicsToolkit",
 ]
+
+# Product ids (matching each add-on's blender_manifest.toml `id`) to keep OUT of
+# the public site — the landing/catalog page and product pages. They still ship
+# in index.json and packages.json, so a token entitled to them can install them
+# in Blender; they're just not advertised (internal/beta tools). Add ids to the
+# literal set, or override at build time via the HIDDEN_PRODUCTS env var
+# (comma-separated).
+HIDDEN_PRODUCTS = {
+    "video_forensics_toolkit",
+    "visibility_toolkit",
+} | set(filter(None, (os.environ.get("HIDDEN_PRODUCTS") or "").replace(" ", "").split(",")))
 
 PAGES_BASE = "https://extensions.edccorp.com"
 REPOSITORY_URL = f"{PAGES_BASE}/index.json"
@@ -755,14 +768,19 @@ def main():
     with open(os.path.join(out_dir, "packages.json"), "w", encoding="utf-8") as fh:
         json.dump(packages, fh, indent=2)
         fh.write("\n")
+    # index.json / packages.json keep every product (hidden ones stay
+    # installable by an entitled token); the public site does not.
+    public_entries = [e for e in entries if e.get("id") not in HIDDEN_PRODUCTS]
     with open(os.path.join(out_dir, "index.html"), "w", encoding="utf-8") as fh:
-        fh.write(render_landing_page(entries, content, support))
+        fh.write(render_landing_page(public_entries, content, support))
     with open(os.path.join(out_dir, "access-and-licensing.html"), "w", encoding="utf-8") as fh:
         fh.write(render_access_licensing_page())
 
     pages_dir = os.path.join(out_dir, "products")
     os.makedirs(pages_dir, exist_ok=True)
     for pid, c in content.items():
+        if pid in HIDDEN_PRODUCTS:
+            continue  # no public product page for internal/beta tools
         with open(os.path.join(pages_dir, f"{pid}.html"), "w", encoding="utf-8") as fh:
             fh.write(render_product_page(pid, c, releases.get(pid)))
     if support:
