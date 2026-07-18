@@ -56,7 +56,7 @@ PRODUCTS = [
 # (comma-separated).
 HIDDEN_PRODUCTS = {
     "video_forensics_toolkit",
-    "visibility_toolkit",
+    "edc_visibility_toolkit",
 } | set(filter(None, (os.environ.get("HIDDEN_PRODUCTS") or "").replace(" ", "").split(",")))
 
 PAGES_BASE = "https://extensions.edccorp.com"
