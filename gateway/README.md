@@ -23,8 +23,11 @@ Blender ──repository secret──▶ extensions.edccorp.com (this gateway on
    `gateway/` (Settings → Source). Railway detects Python and uses
    `railway.json` for the start command.
 2. **Set environment variables** (service → Variables):
-   - `GH_TOKEN` — a fine-grained PAT with **Contents: read** on the four
-     product repos (same scope as the `PRODUCTS_TOKEN` Actions secret).
+   - `GH_TOKEN` — a fine-grained PAT with **Contents: read** on every
+     product repo, including any hidden ones (same scope as the
+     `PRODUCTS_TOKEN` Actions secret). When you add a new product repo,
+     grant it to **both** this token and `PRODUCTS_TOKEN`, or installs of
+     that product 502 (the gateway can't stream the private release asset).
    - `CUSTOMER_TOKENS` — JSON mapping repository secret → customer. A plain label
      includes **every** product with that repository access; an object form scopes it to
      specific products (each customer's Blender then only sees and can
