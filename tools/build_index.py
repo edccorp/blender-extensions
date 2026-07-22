@@ -46,6 +46,7 @@ PRODUCTS = [
     "edccorp/ReconToolkit",
     "edccorp/EDCVisibilityToolkit",
     "edccorp/EDCVideoForensicsToolkit",
+    "edccorp/EDC-Recon-Calculations",
 ]
 
 # Product ids (matching each add-on's blender_manifest.toml `id`) to keep OUT of
@@ -57,6 +58,7 @@ PRODUCTS = [
 HIDDEN_PRODUCTS = {
     "video_forensics_toolkit",
     "edc_visibility_toolkit",
+    "recon_calculations",
 } | set(filter(None, (os.environ.get("HIDDEN_PRODUCTS") or "").replace(" ", "").split(",")))
 
 PAGES_BASE = "https://extensions.edccorp.com"
