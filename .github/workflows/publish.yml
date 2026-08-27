@@ -37,7 +37,7 @@ permissions:
 # mid-flight makes the backend fail the next ones with "Deployment
 # failed, try again later".
 concurrency:
-  group: pages
+  group: pages-publish
   cancel-in-progress: false
 
 jobs:
