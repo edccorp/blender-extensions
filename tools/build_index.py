@@ -30,6 +30,7 @@ import html
 import io
 import json
 import os
+import re
 import shutil
 import sys
 import tomllib
@@ -308,6 +309,18 @@ and licensing</a> for details.
 # straight into an f-string template.
 DETAIL_CSS = """
 .crumb { margin: 1.4rem 0 0; font-size: .9rem; }
+/* Release notes: several screens of headings and lists, so they are set
+   apart from the page's own prose and kept from running the full text
+   width, which is what makes a long changelog unreadable. */
+.notes { border-left: 3px solid var(--accent); padding: .2rem 0 .2rem 1.1rem;
+         margin: 1rem 0 2rem; max-width: 46rem; }
+.notes h3 { font-size: 1.05rem; margin: 1.4rem 0 .4rem; }
+.notes h3:first-child { margin-top: .2rem; }
+.notes h4 { font-size: .95rem; margin: 1.1rem 0 .3rem; opacity: .85; }
+.notes p, .notes li { font-size: .95rem; }
+.notes ul { margin: .3rem 0 .8rem; padding-left: 1.2rem; }
+.notes code { background: rgba(0,0,0,.06); border-radius: 4px; padding: .05rem .3rem;
+         font-size: .9em; }
 .phero { display: grid; grid-template-columns: 1.1fr .9fr; gap: 2rem;
          align-items: center; padding: 2rem 0 1rem; }
 @media (max-width: 720px) { .phero { grid-template-columns: 1fr; } }
@@ -558,6 +571,67 @@ def render_access_licensing_page():
 </html>
 """
 
+def render_notes(text):
+    """Release notes as HTML, from the Markdown subset the changelogs use.
+
+    Each product's CHANGELOG.md section reaches this as the GitHub release
+    body: headings, bold, inline code, bullet lists, paragraphs. Anything
+    else is escaped and shown as text rather than dropped -- a note that
+    renders plainly still tells the reader what changed, whereas a silently
+    swallowed line does not.
+
+    Headings shift down one level: the page already spends h2 on its own
+    sections, so the notes' own ## sits under "What's new" rather than
+    beside it.
+    """
+    def inline(chunk):
+        out = html.escape(chunk)
+        out = re.sub(r"`([^`]+)`", r"<code>\1</code>", out)
+        out = re.sub(r"\*\*([^*]+)\*\*", r"<strong>\1</strong>", out)
+        return out
+
+    html_parts = []
+    bullets = []
+
+    def flush_bullets():
+        if bullets:
+            items = "\n".join(f"<li>{inline(b)}</li>" for b in bullets)
+            html_parts.append(f"<ul>\n{items}\n</ul>")
+            bullets.clear()
+
+    paragraph = []
+
+    def flush_paragraph():
+        if paragraph:
+            html_parts.append(f"<p>{inline(' '.join(paragraph))}</p>")
+            paragraph.clear()
+
+    for raw in (text or "").splitlines():
+        line = raw.rstrip()
+        stripped = line.strip()
+        if not stripped:
+            flush_paragraph()
+            flush_bullets()
+            continue
+        if stripped.startswith("### "):
+            flush_paragraph(); flush_bullets()
+            html_parts.append(f"<h4>{inline(stripped[4:])}</h4>")
+        elif stripped.startswith("## "):
+            flush_paragraph(); flush_bullets()
+            html_parts.append(f"<h3>{inline(stripped[3:])}</h3>")
+        elif stripped.startswith("- "):
+            flush_paragraph()
+            bullets.append(stripped[2:])
+        elif bullets:
+            # A wrapped continuation of the bullet above it.
+            bullets[-1] = f"{bullets[-1]} {stripped}"
+        else:
+            paragraph.append(stripped)
+    flush_paragraph()
+    flush_bullets()
+    return "\n".join(html_parts)
+
+
 def render_product_page(pid, c, release):
     """One product page from its content/products/<pid>.toml."""
     def esc(key, default=""):
@@ -639,12 +713,20 @@ def render_product_page(pid, c, release):
     )
     version_box = ""
     if release:
-        # No release-notes body: these are the first public releases, and the
-        # GitHub notes reference pre-launch internal work.
+        # The notes used to be suppressed here because they were GitHub's
+        # pull-request-derived auto-notes, which referenced pre-launch
+        # internal work. They are hand-written changelog sections now, so
+        # the reason to hide them is gone -- and someone deciding whether to
+        # update has nowhere else to read what changed.
+        published = html.escape(release.get("published", ""))
+        released_on = f" &middot; released {published}" if published else ""
+        notes = render_notes(release.get("notes", ""))
+        whats_new = f'<h2>What\u2019s new</h2>\n<div class="notes">{notes}</div>' if notes else ""
         version_box = f"""<h2>Latest version</h2>
-<p><strong>v{html.escape(release['version'])}</strong>
+<p><strong>v{html.escape(release['version'])}</strong>{released_on}
 &middot; delivered through the <a href="{PAGES_BASE}/">EDC Software repository</a>
-with automatic update notifications in Blender.</p>"""
+with automatic update notifications in Blender.</p>
+{whats_new}"""
     return f"""<!DOCTYPE html>
 <html lang="en">
 <head>
