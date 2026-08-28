@@ -40,7 +40,8 @@ Blender notifies you when updates are available.
   product repos are public).
 - **Required setup while the product repos are private:** add a
   `PRODUCTS_TOKEN` repository secret (a fine-grained personal access
-  token with **Contents: read** on the four product repos). The default
+  token with **Contents: read** on every product repo, hidden ones
+  included). The default
   workflow token can only see this repo, so without the secret every
   product is skipped and the index publishes empty.
 - The **Publish extensions index** workflow runs the script and deploys
@@ -59,7 +60,16 @@ this repo from the product's release workflow.
 ## Maintainer notes
 
 - Add a new product by appending its `owner/repo` to `PRODUCTS` in
-  `tools/build_index.py`.
+  `tools/build_index.py`, and add the repo to both the `PRODUCTS_TOKEN`
+  Actions secret and the gateway's `GH_TOKEN` PAT.
+- Keep a product off the public site (internal or beta tools) by adding
+  its manifest `id` to `HIDDEN_PRODUCTS`. It still ships in `index.json`
+  and `packages.json`, so a repository secret entitled to it installs and
+  updates it in Blender as usual — it just gets no catalog listing and no
+  product page.
+- If a product publishes its releases as GitHub **pre-releases**, also add
+  its `owner/repo` to `PRERELEASE_PRODUCTS`; otherwise the "latest
+  release" lookup finds nothing and the product is skipped.
 - Test locally: `python tools/build_index.py /tmp/site` (set
   `GITHUB_TOKEN` to avoid API rate limits), then open `/tmp/site/index.html`.
 - The site is served at the custom domain `extensions.edccorp.com`

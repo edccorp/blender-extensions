@@ -55,7 +55,8 @@ jobs:
 
       # While the product repos are private, the default workflow token
       # cannot read their releases -- add a PRODUCTS_TOKEN secret (a
-      # fine-grained PAT with Contents:read on the four product repos).
+      # fine-grained PAT with Contents:read on every product repo,
+      # including the hidden ones).
       # MIRROR_ZIPS=0: gateway mode. The zips are NOT copied onto the public
       # Pages site; the Railway gateway at extensions.edccorp.com serves the
       # same /packages/ URLs by streaming the private GitHub release assets

@@ -47,7 +47,16 @@ PRODUCTS = [
     "edccorp/EDCVisibilityToolkit",
     "edccorp/EDCVideoForensicsToolkit",
     "edccorp/EDC-Recon-Calculations",
+    "edccorp/BlendMotion",
 ]
+
+# Product repos that publish their releases as GitHub *pre-releases*. The
+# "latest release" endpoint ignores those (it 404s when a repo has nothing
+# else), so for these repos we take the newest published release of any kind
+# instead.
+PRERELEASE_PRODUCTS = {
+    "edccorp/BlendMotion",
+}
 
 # Product ids (matching each add-on's blender_manifest.toml `id`) to keep OUT of
 # the public site — the landing/catalog page and product pages. They still ship
@@ -59,6 +68,7 @@ HIDDEN_PRODUCTS = {
     "video_forensics_toolkit",
     "edc_visibility_toolkit",
     "recon_calculations",
+    "blendmotion",
 } | set(filter(None, (os.environ.get("HIDDEN_PRODUCTS") or "").replace(" ", "").split(",")))
 
 PAGES_BASE = "https://extensions.edccorp.com"
@@ -97,6 +107,8 @@ def _fetch(url, accept="application/vnd.github+json"):
 
 
 def _latest_release(repo):
+    if repo in PRERELEASE_PRODUCTS:
+        return _newest_release(repo)
     try:
         return json.loads(_fetch(f"https://api.github.com/repos/{repo}/releases/latest"))
     except urllib.error.HTTPError as err:
@@ -105,6 +117,26 @@ def _latest_release(repo):
     except urllib.error.URLError as err:
         print(f"SKIP {repo}: cannot fetch latest release ({err.reason})")
         return None
+
+
+def _newest_release(repo):
+    """Newest published release, pre-releases included (drafts excluded)."""
+    try:
+        releases = json.loads(
+            _fetch(f"https://api.github.com/repos/{repo}/releases?per_page=10")
+        )
+    except urllib.error.HTTPError as err:
+        print(f"SKIP {repo}: cannot list releases ({err.code} {err.reason})")
+        return None
+    except urllib.error.URLError as err:
+        print(f"SKIP {repo}: cannot list releases ({err.reason})")
+        return None
+    # The API returns releases newest-first.
+    for release in releases:
+        if not release.get("draft"):
+            return release
+    print(f"SKIP {repo}: no published releases")
+    return None
 
 
 def _manifest_from_zip(data):
