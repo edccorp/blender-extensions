@@ -39,11 +39,16 @@ import zipfile
 
 CONTENT_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "content")
 
+# Current repository names. Four of these were renamed with EDC prefixes;
+# GitHub redirects the old names, but a redirect is not a guarantee -- it
+# stops working the moment anyone creates a repository under an old name,
+# and the product would then vanish from index.json with no error, just
+# a skip. Name the repositories as they actually are.
 PRODUCTS = [
     "edccorp/CamMatch",
-    "edccorp/HVEToolkit",
-    "edccorp/PointCloudToolkit",
-    "edccorp/ReconToolkit",
+    "edccorp/EDCHVEToolkit",
+    "edccorp/EDCPointCloudToolkit",
+    "edccorp/EDCReconToolkit",
     "edccorp/EDCVisibilityToolkit",
     "edccorp/EDCVideoForensicsToolkit",
     "edccorp/EDC-Recon-Calculations",
