@@ -1,0 +1,97 @@
+# Product page content for the Video Forensics Toolkit™.
+#
+# Inert until the product launches: its id is in HIDDEN_PRODUCTS in
+# tools/build_index.py, and the build skips the product page for hidden
+# products. Remove it from that set and this page starts rendering on the
+# next publish run.
+#
+# No price, hero image, gallery or sample report yet — add them before
+# launch. The renderer omits each of those sections when its key is absent,
+# so the page is coherent without them.
+
+name = "Video Forensics Toolkit™"
+tagline = "Recover What the Video Actually Recorded"
+badge = "Built for Blender • Powered by FFmpeg & OpenCV"
+blender_min = "4.2"
+
+pitch = """The Video Forensics Toolkit™ analyses video evidence inside \
+Blender, in the footage's own terms. It answers the question every \
+measurement taken from video depends on first: when did each frame actually \
+happen? Much CCTV, DVR and phone footage is variable-rate, or pads a nominal \
+rate with duplicated frames, so assuming a constant frame rate silently \
+corrupts every calculation built on it. The toolkit recovers the real timing \
+from the file's own per-frame timestamps instead of trusting the container's \
+headline number, then builds its authenticity, structure and motion analyses \
+on that footing."""
+
+features = [
+    "Real frame timing from the file's own timestamps (PTS), not the container rate",
+    "Time map: the true elapsed time between any two frames",
+    "Duplicate-frame detection — the padding a DVR inserts to reach a nominal rate",
+    "Container and stream metadata, encoder signatures, SHA-256 for chain of custody",
+    "Timestamp OCR for burned-in clocks",
+    "Authenticity checks: interlacing, Error Level Analysis, sensor-noise consistency",
+    "PRNU camera fingerprinting and double-compression scoring",
+    "Codec and macroblock structure, with computed block analysis for any codec",
+    "Optical-flow field, scene cuts, active-picture detection, rolling-shutter measurement",
+    "Speed from tracked features and a distance measured in the scene",
+    "Frame-accurate excerpt export, exhibit videos, and a per-frame CSV ledger",
+]
+
+requirements = [
+    "Blender 4.2 or newer",
+    "FFmpeg (ffprobe) on the system PATH — reads the coded stream's timing and structure",
+    "imageio with the FFmpeg backend — decodes individual frames for analysis",
+    "OpenCV — optical flow and feature tracking; installs from the panel on first run",
+    "Optional: Tesseract or EasyOCR, for reading burned-in timestamps",
+]
+
+[[sections]]
+title = "Why the timing comes first"
+body = """Any speed or distance derived from video assumes you know how much \
+real time passed between the frames you measured across. Variable-rate \
+footage and duplicate padding both break that assumption without announcing \
+it, and a constant-frame-rate calculation on either is wrong by however much \
+the real cadence differs — silently, and in a direction nobody can guess \
+after the fact.
+
+Analyze Frame Timing recovers the true rate from the stream's presentation \
+timestamps and reports whether the footage is constant-rate at all. The Time \
+Map then gives the real elapsed seconds between any two frames, so a \
+measurement taken later rests on what the recorder did rather than on what \
+the container claims."""
+
+[[sections]]
+title = "Measured, not assumed"
+body = """Speed From Tracks measures its own scale. Two tracked points a \
+known real distance apart give metres-per-pixel in the image, at those \
+points' own depth; the interval comes from the recovered timestamps. The \
+only figure typed in is the one distance somebody went and measured in the \
+scene, and the result is reported together with the scale and interval it \
+used, so the reading can be checked rather than believed.
+
+Where an analysis cannot be trusted, it says so instead of producing a \
+number: a frame with no timestamp, a marker the tracker lost, or a subject \
+that changed depth over the interval each stop the measurement rather than \
+substituting something plausible."""
+
+[[sections]]
+title = "Stream evidence and computed analysis are kept apart"
+body = """Some exhibits show what the encoder actually stored — its motion \
+vectors, its block partitions — and those are only available where the codec \
+exports them: H.264 and the MPEG family do, while H.265/HEVC, VP9, AV1 and \
+intra-only codecs do not. Asked for one of those renders on footage that \
+carries no such data, the toolkit refuses rather than writing a video with \
+nothing drawn on it.
+
+The computed renders — block analysis, block provenance, optical flow — work \
+on any codec because they are derived from the decoded pixels. They show \
+what any block encoder would decide from this picture, not the choices this \
+encoder made, and exhibits should be labelled accordingly."""
+
+[[sections]]
+title = "Built for professionals"
+body = """The Video Forensics Toolkit™ is designed for accident \
+reconstruction engineers, forensic engineers, engineering consultants, \
+government agencies, law enforcement, universities, and researchers working \
+with video evidence."""
