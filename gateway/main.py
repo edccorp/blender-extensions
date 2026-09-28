@@ -101,6 +101,26 @@ ACCESS_URL = f"{PUBLIC_BASE}/access-and-licensing.html"
 FREE_PRODUCTS = [
     p.strip() for p in os.environ.get("FREE_PRODUCTS", "").split(",") if p.strip()
 ]
+# Products a wildcard does NOT reach: internal and beta tools, which are
+# kept off the public catalogue by HIDDEN_PRODUCTS in tools/build_index.py
+# and have to be named on a customer outright to be downloadable.
+#
+# "*" meant literally everything, so every customer holding one -- which is
+# the compact plain-string form, and therefore most of them -- could fetch
+# an unreleased internal tool the moment it entered the index. Being absent
+# from the catalogue is not access control: the index still lists it and
+# Blender will install anything the index offers and the token allows.
+#
+# Naming one explicitly still works, which is how the master account and a
+# named beta tester get it.
+RESTRICTED_PRODUCTS = frozenset(
+    p.strip() for p in os.environ.get(
+        "RESTRICTED_PRODUCTS",
+        "video_forensics_toolkit,edc_visibility_toolkit,"
+        "recon_calculations,blendmotion",
+    ).split(",") if p.strip()
+)
+
 # Update-service term (days) stamped on free registrations, so "free for
 # now" has a built-in sunset if a product is later charged for. Empty =
 # perpetual. Invalid values fail loudly rather than silently granting forever.
@@ -215,17 +235,31 @@ def _active(expiry) -> bool:
     return expiry is None or str(expiry) >= date.today().isoformat()
 
 
+def _entitlement_keys(product_id: str) -> tuple:
+    """Which grants can cover this product.
+
+    A wildcard covers the published catalogue. It does not reach a
+    restricted product: those have to be named, or every customer holding
+    a "*" would get an internal tool the moment it entered the index.
+    """
+    if product_id in RESTRICTED_PRODUCTS:
+        return (product_id,)
+    return ("*", product_id)
+
+
 def _entitled(customer: dict, product_id: str) -> bool:
     if product_id in FREE_PRODUCTS:
         return True  # free products are included with every valid repository secret
     products = customer["products"]
-    return any(k in products and _active(products[k]) for k in ("*", product_id))
+    return any(k in products and _active(products[k])
+               for k in _entitlement_keys(product_id))
 
 
 def _entitlement_state(customer: dict, product_id: str) -> str:
     """'active', 'expired' (was included, repository access term lapsed), or 'none'."""
     products = customer["products"]
-    expiries = [products[k] for k in ("*", product_id) if k in products]
+    expiries = [products[k] for k in _entitlement_keys(product_id)
+                if k in products]
     if not expiries:
         return "none"
     return "active" if any(_active(e) for e in expiries) else "expired"
@@ -1312,7 +1346,14 @@ async def index_json(request: Request):
     customer = await _require_customer(request)
     body = await _origin_get("index.json")
     products = customer["products"]
-    if not ("*" in products and _active(products["*"])):
+    # The wildcard shortcut used to skip the filter outright, which was true
+    # while "*" meant everything. It no longer does: a restricted product is
+    # not covered by one, so a "*" customer would still have been shown every
+    # internal tool in Blender's Get Extensions list and then refused at the
+    # download with a 403 -- an offer that cannot be taken up.
+    covers_everything = ("*" in products and _active(products["*"])
+                         and not RESTRICTED_PRODUCTS)
+    if not covers_everything:
         index = json.loads(body)
         index["data"] = [
             e for e in index.get("data", []) if _entitled(customer, e.get("id", ""))
