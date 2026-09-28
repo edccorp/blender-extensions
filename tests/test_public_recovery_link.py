@@ -82,6 +82,19 @@ def test_the_homepage_link_is_absolute_as_well():
     assert 'href="/recover"' not in LAUNCH
 
 
+def test_the_homepage_link_looks_like_a_link():
+    """The page resets every anchor to `color:inherit; text-decoration:none`,
+    which is right for the nav and the buttons and wrong for a link inside
+    a sentence -- it read as ordinary prose, so the one route a customer
+    with no token has did not look clickable."""
+    assert ".install p a" in LAUNCH
+    rule = LAUNCH.split(".install p a", 1)[1].split("}", 1)[0]
+    assert "text-decoration:underline" in rule
+    # Colour as well as underline, because colour alone is not something
+    # every reader can see.
+    assert "var(--accent-ink)" in rule
+
+
 def test_the_homepage_offers_it_where_the_token_is_pasted():
     # After the steps, not buried under the older-add-on note below them.
     install = LAUNCH.split('id="install"', 1)[1].split("</section>", 1)[0]
