@@ -20,21 +20,38 @@ ROOT = pathlib.Path(__file__).resolve().parents[1]
 GATEWAY = (ROOT / "gateway" / "main.py").read_text()
 
 
-def test_the_gateway_still_cannot_send_email():
-    """The premise of every test below. If a mail path is ever added, these
-    need revisiting rather than deleting -- the pages could then tell the
-    truth by sending the message."""
-    for library in ("smtplib", "sendgrid", "mailgun", "postmark", "boto3",
-                    "EmailMessage", "send_mail"):
-        assert library not in GATEWAY, f"{library} is here now; re-read this file"
+MAIL = (ROOT / "gateway" / "mail.py").read_text()
 
 
-def test_no_page_promises_the_token_by_email():
-    # The specific sentence this file exists for, and any rewording of it.
-    lowered = GATEWAY.lower()
-    for claim in ("token by email", "secret by email", "emailed to you",
-                  "receive your access token by email"):
-        assert claim not in lowered, f"a page promises: {claim!r}"
+def waiting_branch():
+    """The whole not-yet-paid branch, including what it works out first."""
+    return GATEWAY.split('payment_status") not in', 1)[1].split("status_code=202", 1)[0]
+
+
+def test_sending_is_off_until_it_is_configured():
+    """The premise these promises rest on. Mail exists now, but it does
+    nothing until EMAIL_HOST and the rest are set, so a page may only
+    promise an email where one will actually be sent."""
+    body = MAIL.split("def configured(", 1)[1].split("\ndef ", 1)[0]
+    assert "HOST and USER and PASSWORD and FROM" in body
+    send = MAIL.split("def send(", 1)[1].split("\ndef ", 1)[0]
+    assert "if not (configured() and to_address):" in send
+    assert send.index("configured()") < send.index("smtplib.SMTP")
+
+
+def test_a_page_promises_an_email_only_where_one_is_sent():
+    """The sentence this file exists for. It may come back -- it is true
+    once mail is configured -- but only behind that check."""
+    waiting = waiting_branch()
+    if "email" in waiting.lower():
+        assert "mail.configured()" in waiting, \
+            "the waiting page promises an email unconditionally"
+
+
+def test_the_promise_is_absent_when_mail_is_off():
+    # The false half of the condition has to be empty, not a softer claim.
+    waiting = waiting_branch()
+    assert 'if mail.configured() else ""' in waiting
 
 
 def test_the_waiting_page_says_where_the_token_will_appear():

@@ -296,3 +296,59 @@ and that endpoint can be added.
 - Rolling back to the unauthenticated setup: point the `extensions` DNS
   CNAME back at `edccorp.github.io`, re-add the custom domain in Pages
   settings, and set `MIRROR_ZIPS` back to `"1"`.
+
+## Emailing customers their repository secret
+
+Off unless configured. With `EMAIL_HOST` unset nothing is sent and every
+page behaves exactly as it did before — including the checkout pages, which
+only promise an email where one will actually go out.
+
+Railway → Variables:
+
+| Variable | Example | Notes |
+|---|---|---|
+| `EMAIL_HOST` | `smtp.office365.com` | GoDaddy's older Workspace Email is `smtpout.secureserver.net` |
+| `EMAIL_PORT` | `587` | STARTTLS; the default |
+| `EMAIL_USER` | `software@edccorp.com` | a **dedicated** mailbox, not a person's |
+| `EMAIL_PASSWORD` | *app password* | see below |
+| `EMAIL_FROM` | `software@edccorp.com` | defaults to `EMAIL_USER` |
+
+Use a mailbox of its own. A mailbox credential can read everything in that
+inbox, not only send from it, so the one in Railway's environment should
+reach a mailbox that holds nothing. It still wants to be an address someone
+reads: people reply to "here is your licence key" whatever it is called.
+
+Microsoft 365 needs SMTP AUTH enabled for that mailbox (Microsoft disables
+it by default on newer tenants) and an app password if the account has MFA.
+Check both from the deployed container rather than from a laptop — Railway's
+egress is what matters:
+
+```
+python -c "
+import smtplib
+s = smtplib.SMTP('smtp.office365.com', 587, timeout=10)
+s.ehlo(); s.starttls()
+code, caps = s.ehlo()
+print('AUTH advertised:', b'AUTH' in caps)
+s.quit()
+"
+```
+
+Two things then send:
+
+- **A new purchase** — the secret is emailed when `_provision_purchase`
+  creates it, which is what finally answers a payment that settles after the
+  buyer has closed the tab. Only on a genuinely new provisioning, so a
+  reloaded `/welcome` or a replayed webhook cannot send it twice.
+- **`/recover`** — a customer enters the address they bought with and the
+  secret is emailed **to the address on the record**, never shown on the
+  page and never sent to the address typed in. The answer is identical
+  whether or not that address belongs to a customer, so the form cannot be
+  used to ask which firms buy from us; and one address gets at most one
+  email every five minutes.
+
+Delivery is fire-and-check-the-log: SMTP reports acceptance by the next hop
+and nothing after it, so a bounce is invisible here. `[gateway] mail:` and
+`[gateway] recover:` lines in Railway's log say `sent` or `NOT SENT` for
+every attempt. If silent non-delivery ever becomes the problem, `mail.send`
+is the only function to reimplement against a transactional provider.

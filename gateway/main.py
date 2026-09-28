@@ -53,6 +53,7 @@ Environment variables:
     CACHE_TTL        origin cache seconds (default 300)
 """
 
+import asyncio
 import base64
 import hashlib
 import hmac
@@ -67,6 +68,8 @@ import httpx
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.responses import HTMLResponse, RedirectResponse, Response, StreamingResponse
 from starlette.background import BackgroundTask
+
+import mail
 
 ORIGIN_BASE = os.environ.get(
     "ORIGIN_BASE", "https://edccorp.github.io/blender-extensions"
@@ -530,6 +533,30 @@ def _merge_products(existing: dict, ids: list, term_days: int | None) -> dict:
     return merged
 
 
+async def _email_new_purchase(name: str, email: str, token: str, products) -> None:
+    """Send a new buyer their secret, without letting that hold up anything.
+
+    Only on a genuinely new provisioning. _provision_purchase runs again on
+    every /welcome reload and on a webhook replay, and both return early
+    from the already-processed branch above -- so this cannot turn into one
+    email per page refresh.
+
+    Run off the event loop because smtplib blocks, and awaited rather than
+    fired and forgotten so that the log line lands in the same request. The
+    customer's page does not wait on the result: the token is saved before
+    this runs and the page shows it whether or not the mail got out.
+    """
+    if not (email and mail.configured()):
+        return
+    sent = await asyncio.to_thread(
+        mail.send, email,
+        "Your EDC Software repository secret",
+        mail.purchase_body(name, token, _normalize_products(products)),
+    )
+    print(f"[gateway] mail: purchase secret to <{email}>: "
+          f"{'sent' if sent else 'NOT SENT'}")
+
+
 async def _provision_purchase(session: dict) -> dict:
     """Turn a paid checkout session into a customer entry, exactly once.
 
@@ -588,6 +615,7 @@ async def _provision_purchase(session: dict) -> dict:
             customers[token] = entry
             await _write_customers_file(customers, sha, f"Add customer: {name} (Stripe purchase)")
             print(f"[gateway] stripe: provisioned {name} <{email}> ({', '.join(ids)})")
+            await _email_new_purchase(name, email, token, entry["products"])
             return {"token": token, "name": name, "products": entry["products"],
                     "merged": False, "already_processed": False}
         except HTTPException as exc:
@@ -707,17 +735,20 @@ async def welcome(session_id: str = ""):
         raise HTTPException(status_code=404)
     session = await _stripe_checkout_session(session_id)
     if session.get("payment_status") not in ("paid", "no_payment_required"):
-        # This page is the only place the token appears, so it must not
-        # send anyone away expecting it somewhere else. It used to promise
-        # an email: nothing sends one, and nothing could -- the token is
-        # created by _provision_purchase below, after payment settles, so
-        # it does not exist when Stripe sends its receipt.
+        # An email is promised only where one will actually be sent. With
+        # EMAIL_HOST unset nothing sends, and telling a buyer who has just
+        # paid to wait for a message that never comes is the worst moment
+        # to be wrong -- which is exactly what this page used to do.
+        by_email = (
+            " We will also email it to you as soon as it exists."
+            if mail.configured() else ""
+        )
         return HTMLResponse(
             "<h1>Payment still processing</h1>"
             "<p>Your payment hasn't settled yet, so there is no access token "
             "yet either. <b>Bookmark this page</b> and reload it in a few "
             "minutes — your token will appear here as soon as the payment "
-            "clears. This page is the only place it is shown.</p>"
+            f"clears.{by_email}</p>"
             "<p>If it still isn't here an hour from now, contact "
             "Engineering Dynamics Company and we will send it to you.</p>",
             status_code=202,
@@ -985,6 +1016,112 @@ Enter your details and your personal access token is created instantly.</p>
 <button type="submit">Create my access token</button>
 </form>
 </div></main></body></html>"""
+
+
+#: When each address was last sent a recovery email. Enough to stop the
+#: route being used to hammer a mailbox; not a defence against a determined
+#: attacker, which is what the identical answers below are for. In memory,
+#: so a deploy clears it -- acceptable, because the cost of the rare extra
+#: email is one extra email.
+_RECOVERY_SENT: dict[str, float] = {}
+RECOVERY_INTERVAL = 300.0
+
+
+def _recovery_page(message: str, sent: bool = False) -> str:
+    heading = "Check your email" if sent else "Recover your repository secret"
+    form = "" if sent else """
+<form action="/recover" method="get">
+<label for="email">The email address you bought with</label>
+<input type="email" id="email" name="email" required>
+<button type="submit">Email me my secret</button>
+</form>"""
+    return f"""<!doctype html>
+<html lang="en"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex">
+<title>Recover your secret — EDC Software</title>
+<style>
+  :root {{ color-scheme: light dark;
+    --bg: #f6f7f9; --card: #ffffff; --ink: #1c2530; --muted: #5b6773;
+    --accent: #6b2440; --border: #e2e6ea; }}
+  @media (prefers-color-scheme: dark) {{
+    :root {{ --bg: #10151b; --card: #1a2129; --ink: #e8edf2;
+      --muted: #9aa7b2; --accent: #d98aa0; --border: #2a333d; }} }}
+  body {{ margin: 0; background: var(--bg); color: var(--ink);
+    font: 16px/1.6 system-ui, "Segoe UI", sans-serif; }}
+  main {{ max-width: 34rem; margin: 3rem auto; padding: 0 1.25rem; }}
+  .card {{ background: var(--card); border: 1px solid var(--border);
+    border-radius: 12px; padding: 2rem; }}
+  h1 {{ margin: 0 0 .5rem; font-size: 1.4rem; }}
+  .muted {{ color: var(--muted); }}
+  label {{ display: block; margin-top: 1rem; font-weight: 600; }}
+  input {{ width: 100%; box-sizing: border-box; padding: .6rem .7rem;
+    border: 1px solid var(--border); border-radius: 8px; background: var(--bg);
+    color: var(--ink); font-size: 1rem; }}
+  button {{ margin-top: 1.4rem; width: 100%; background: var(--accent);
+    color: #fff; border: 0; border-radius: 8px; padding: .75rem;
+    font-size: 1.05rem; font-weight: 600; cursor: pointer; }}
+</style></head><body><main><div class="card">
+<h1>{heading}</h1>
+<p class="muted">{message}</p>{form}
+</div></main></body></html>"""
+
+
+@app.get("/recover")
+async def recover(email: str = ""):
+    """Email a customer their repository secret, to the address on file.
+
+    Two rules, and the whole design is in them.
+
+    It only ever sends to the address recorded on the customer, never to
+    the one typed in -- they are the same address when the rightful owner
+    asks, and typing somebody else's only mails that person. So the secret
+    is never shown on this page and never reaches whoever filled the form.
+
+    And the answer is the same whether or not the address belongs to a
+    customer. Saying "no such customer" would turn this into a way to ask
+    which firms buy from us, one address at a time.
+    """
+    if not email:
+        return HTMLResponse(_recovery_page(
+            "Type the address you bought with and we will email your "
+            "repository secret to it."))
+
+    same_answer = _recovery_page(
+        "If that address belongs to an EDC Software customer, their "
+        "repository secret is on its way to it. It can take a few minutes. "
+        "If nothing arrives, check spam, then contact Engineering Dynamics "
+        "Company.", sent=True)
+
+    if not mail.configured():
+        print("[gateway] recover: asked for but email is not configured")
+        return HTMLResponse(same_answer)
+
+    wanted = email.strip().lower()
+    now = time.time()
+    if now - _RECOVERY_SENT.get(wanted, 0.0) < RECOVERY_INTERVAL:
+        # Already sent one recently. The answer does not change, so someone
+        # holding the button down learns nothing and the mailbox is spared.
+        return HTMLResponse(same_answer)
+
+    customers, _sha = await _read_customers_file()
+    for token, value in customers.items():
+        if not isinstance(value, dict):
+            continue        # the compact form carries no address to send to
+        if value.get("email", "").strip().lower() != wanted:
+            continue
+        _RECOVERY_SENT[wanted] = now
+        sent = await asyncio.to_thread(
+            mail.send, value["email"],
+            "Your EDC Software repository secret",
+            mail.recovery_body(value.get("name", "there"), token),
+        )
+        print(f"[gateway] recover: secret to <{wanted}>: "
+              f"{'sent' if sent else 'NOT SENT'}")
+        break
+    else:
+        print(f"[gateway] recover: no customer for <{wanted}>")
+    return HTMLResponse(same_answer)
 
 
 @app.get("/register")
