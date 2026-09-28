@@ -642,8 +642,8 @@ automatically, so there is <strong>nothing to change in Blender</strong>:</p>
 <li>Your new product appears — click <b>Install</b>, and make sure the add-on is
 <b>enabled</b> (tick its checkbox under Preferences &rsaquo; Add-ons if its tab doesn't show)</li>
 </ol>
-<p class="muted"><strong>Keep your repository secret confidential.</strong> Lost your repository secret or using a new computer? Reply to your
-receipt email or contact Engineering Dynamics Company.</p>"""
+<p class="muted"><strong>Keep your repository secret confidential.</strong> Lost your repository secret or using a new computer?
+Contact Engineering Dynamics Company and we will send it to you.</p>"""
     else:
         heading = "Payment received — welcome!"
         token_block = f"""
@@ -661,9 +661,10 @@ Edit &rsaquo; Preferences &rsaquo; Add-ons. Updates then arrive automatically.</
 <li><b>Save Preferences</b> (the <b>&#8801;</b> menu at the bottom-left of the Preferences
 window) so you don't have to re-enable it next time you open Blender.</li>
 </ol>
-<p class="muted"><strong>Keep your repository secret confidential.</strong> Anyone with it can access your EDC Software repository access. Save it somewhere safe — this page won't show it
-again. Lost it or need help? Reply to your receipt email or contact
-Engineering Dynamics Company.</p>"""
+<p class="muted"><strong>Keep your repository secret confidential.</strong> Anyone with it can reach your EDC Software
+downloads. Save it somewhere safe now — bookmarking this page is not a
+substitute, and it is shown nowhere else. Lost it, or on a new computer?
+Contact Engineering Dynamics Company and we will send it to you.</p>"""
     return f"""<!doctype html>
 <html lang="en"><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
@@ -706,10 +707,19 @@ async def welcome(session_id: str = ""):
         raise HTTPException(status_code=404)
     session = await _stripe_checkout_session(session_id)
     if session.get("payment_status") not in ("paid", "no_payment_required"):
+        # This page is the only place the token appears, so it must not
+        # send anyone away expecting it somewhere else. It used to promise
+        # an email: nothing sends one, and nothing could -- the token is
+        # created by _provision_purchase below, after payment settles, so
+        # it does not exist when Stripe sends its receipt.
         return HTMLResponse(
-            "<h1>Payment still processing</h1><p>Your payment hasn't settled yet. "
-            "You'll receive your access token by email once it does — or revisit "
-            "this page in a few minutes.</p>",
+            "<h1>Payment still processing</h1>"
+            "<p>Your payment hasn't settled yet, so there is no access token "
+            "yet either. <b>Bookmark this page</b> and reload it in a few "
+            "minutes — your token will appear here as soon as the payment "
+            "clears. This page is the only place it is shown.</p>"
+            "<p>If it still isn't here an hour from now, contact "
+            "Engineering Dynamics Company and we will send it to you.</p>",
             status_code=202,
         )
     return HTMLResponse(_welcome_html(await _provision_purchase(session)))
