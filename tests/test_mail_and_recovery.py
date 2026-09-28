@@ -323,3 +323,60 @@ def test_a_customer_with_no_email_on_file_is_skipped_not_crashed():
     """Entries added by hand are a plain string with no address at all."""
     body = recover_body()
     assert "isinstance(value, dict)" in body
+
+
+# ------------------------------------------------------- saying so on /healthz
+
+def test_the_sending_domain_is_reported_without_the_mailbox(monkeypatch):
+    # /healthz is public. The domain is already in DNS and in the From of
+    # every message; the mailbox is not worth publishing alongside it.
+    mail = load_mail(monkeypatch, **CONFIGURED)
+    assert mail.from_domain() == "edccorp.com"
+    assert "software" not in mail.from_domain()
+
+
+def test_an_unconfigured_sender_has_no_domain_to_report(monkeypatch):
+    assert load_mail(monkeypatch).from_domain() == ""
+
+
+def test_a_from_that_is_not_an_address_reports_nothing(monkeypatch):
+    # Rather than reporting the malformed value itself back out.
+    mail = load_mail(monkeypatch, RESEND_API_KEY="re_test_key",
+                     EMAIL_FROM="edccorp.com")
+    assert mail.from_domain() == ""
+
+
+def test_a_named_from_still_reports_a_clean_domain(monkeypatch):
+    # "EDC Software <software@edccorp.com>" is a valid From that Resend
+    # accepts, and the domain is what gets compared against the one it has
+    # verified -- so it cannot come back with a bracket stuck to it.
+    mail = load_mail(monkeypatch, RESEND_API_KEY="re_test_key",
+                     EMAIL_FROM="EDC Software <software@edccorp.com>")
+    assert mail.from_domain() == "edccorp.com"
+
+
+def test_healthz_reports_whether_mail_is_configured():
+    """The one subsystem whose failure is silent -- nobody notices a secret
+    that never arrived until days later."""
+    body = GATEWAY.split("async def healthz(", 1)[1].split("\n@app", 1)[0]
+    assert '"mail": mail.configured()' in body
+
+
+def test_healthz_reports_the_domain_mail_is_sent_from():
+    # A From on a domain Resend has not verified is refused outright, and
+    # one wrong character looks identical to a working configuration.
+    body = GATEWAY.split("async def healthz(", 1)[1].split("\n@app", 1)[0]
+    assert '"mail_from_domain": mail.from_domain()' in body
+
+
+def test_unconfigured_mail_does_not_make_the_gateway_unhealthy():
+    """Sending is optional and off by default: a gateway that cannot mail
+    still serves every download, and `ok` must not claim otherwise."""
+    body = GATEWAY.split("async def healthz(", 1)[1].split("\n@app", 1)[0]
+    ok_line = [l for l in body.splitlines() if '"ok":' in l][0]
+    assert "mail" not in ok_line
+    # The only thing allowed to pull `ok` down after the fact is the
+    # customers file, which is what actually stops downloads working.
+    demotions = [l.strip() for l in body.splitlines() if 'body["ok"] = False' in l]
+    assert len(demotions) == 1
+    assert "_customers_cache" in body.split(demotions[0], 1)[0].rsplit("if ", 1)[-1]

@@ -1172,6 +1172,18 @@ async def healthz():
         "tokens_configured": len(tokens),
         "store_products": len(STRIPE_PRICES),
         "stripe_key": bool(STRIPE_SECRET_KEY),
+        # Mail is the one subsystem whose failure is silent: a customer who
+        # never receives their secret does not complain for days, and an
+        # unconfigured gateway behaves exactly like a working one right up
+        # until it drops a purchase email. False here is not an error --
+        # sending is optional and off by default -- but it is the answer to
+        # "did that variable actually take?" without redeploying to look.
+        "mail": mail.configured(),
+        # The domain only. It is already public in DNS and on every message
+        # sent, and it is where the mistakes are: a From on the wrong domain
+        # is refused by Resend and shows up here rather than in a log
+        # nobody reads. The local part stays off a public endpoint.
+        "mail_from_domain": mail.from_domain(),
         "cache_ttl": CACHE_TTL,
         "free_products": FREE_PRODUCTS,
         "free_term_days": FREE_TERM_DAYS,

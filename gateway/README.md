@@ -324,6 +324,13 @@ Railway → Variables:
 | `EMAIL_REPLY_TO` | `support@edccorp.com` | optional; unset, replies go to `EMAIL_FROM` |
 | `EMAIL_TIMEOUT` | `15` | seconds; the default |
 
+`/healthz` reports `"mail"` (is it configured at all) and
+`"mail_from_domain"` (which domain it sends from) — so "did that variable
+actually take?" is one URL rather than a redeploy, and a `EMAIL_FROM`
+typoed onto a domain Resend has not verified shows up before a customer
+does. Mail being off does not make the gateway unhealthy: `"ok"` stays
+true, because downloads still work.
+
 Verify `edccorp.com` under Resend → Domains first. It gives DKIM and SPF
 records to add at GoDaddy, where the DNS is. Until the domain is verified
 Resend refuses anything sent from an address on it, and the refusal is

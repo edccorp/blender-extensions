@@ -41,6 +41,21 @@ def configured():
     return bool(API_KEY and FROM)
 
 
+def from_domain():
+    """The domain messages are sent from, for /healthz to report.
+
+    The domain and not the address: this ends up on a public endpoint, and
+    the domain is already public in DNS and in the From of every message,
+    whereas the mailbox is not worth publishing. It is also where the
+    mistakes are -- a From on a domain that is not verified with Resend is
+    refused outright, and one character is all it takes.
+    """
+    # A From may carry a display name -- EDC Software <a@b.com> -- which
+    # Resend accepts and which would otherwise report a domain with a
+    # bracket stuck to it.
+    return FROM.rsplit("@", 1)[-1].strip("<> ") if "@" in FROM else ""
+
+
 def payload(to_address, subject, body):
     """The request Resend expects.
 
