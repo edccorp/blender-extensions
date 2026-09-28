@@ -251,7 +251,16 @@ async def _require_customer(request: Request) -> dict:
                 "A valid EDC Software repository secret is required. In Blender, "
                 "enable 'Requires Access Token' on the extensions.edccorp.com "
                 "repository and paste your repository secret into the Secret field. "
-                "Contact Engineering Dynamics Company for a repository secret."
+                # Blender renders this in a dialog, so the URL is text to
+                # type rather than a link -- worth naming anyway, because
+                # this is the message a customer sees at the exact moment
+                # they discover the secret they had is gone.
+                + ("Lost the one you had? Visit "
+                   "https://extensions.edccorp.com/recover to have it "
+                   "emailed to you."
+                   if mail.configured() else
+                   "Contact Engineering Dynamics Company for a "
+                   "repository secret.")
             ),
             headers={"WWW-Authenticate": "Bearer"},
         )
@@ -637,6 +646,27 @@ def _stripe_signature_ok(payload: bytes, header: str) -> bool:
     return any(hmac.compare_digest(expected, v) for k, v in pairs if k == "v1")
 
 
+def _lost_secret_line() -> str:
+    """"I have lost my secret" -- pointed at the page that answers it.
+
+    /recover exists, is tested and is live, and until this was written
+    nothing on the site linked to it: every page a customer reads when they
+    have lost their secret told them to write in instead, which is the
+    support request /recover was built to remove. The page is noindex, so
+    being linked from here is the only way anyone finds it.
+
+    Still conditional on mail being configured. With no key set nothing is
+    sent, /recover answers "on its way" regardless -- it must, or it becomes
+    a way to ask which firms buy from us -- and sending a customer there
+    would be sending them somewhere that cannot help and will not say so.
+    """
+    if mail.configured():
+        return ('Lost it, or on a new computer? '
+                '<a href="/recover">Have it emailed to you</a>.')
+    return ('Lost it, or on a new computer? Contact '
+            'Engineering Dynamics Company and we will send it to you.')
+
+
 def _welcome_html(result: dict) -> str:
     products = _normalize_products(result["products"])
     if "*" in products:
@@ -669,8 +699,7 @@ automatically, so there is <strong>nothing to change in Blender</strong>:</p>
 <li>Your new product appears — click <b>Install</b>, and make sure the add-on is
 <b>enabled</b> (tick its checkbox under Preferences &rsaquo; Add-ons if its tab doesn't show)</li>
 </ol>
-<p class="muted"><strong>Keep your repository secret confidential.</strong> Lost your repository secret or using a new computer?
-Contact Engineering Dynamics Company and we will send it to you.</p>"""
+<p class="muted"><strong>Keep your repository secret confidential.</strong> {_lost_secret_line()}</p>"""
     else:
         heading = "Payment received — welcome!"
         token_block = f"""
@@ -690,8 +719,7 @@ window) so you don't have to re-enable it next time you open Blender.</li>
 </ol>
 <p class="muted"><strong>Keep your repository secret confidential.</strong> Anyone with it can reach your EDC Software
 downloads. Save it somewhere safe now — bookmarking this page is not a
-substitute, and it is shown nowhere else. Lost it, or on a new computer?
-Contact Engineering Dynamics Company and we will send it to you.</p>"""
+substitute, and it is shown nowhere else. {_lost_secret_line()}</p>"""
     return f"""<!doctype html>
 <html lang="en"><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
@@ -1152,7 +1180,7 @@ includes every free EDC product — press the refresh button on the
 extensions.edccorp.com repository in Blender and
 {html.escape(', '.join(PRODUCT_NAMES.get(p, p) for p in ids))} will appear —
 click <b>Install</b>, and enable the add-on under Preferences &rsaquo; Add-ons
-if its tab doesn't show. Lost your token? Contact Engineering Dynamics Company.</p>""")
+if its tab doesn't show. {_lost_secret_line()}</p>""")
 
     token = "edc_" + secrets.token_urlsafe(18)
     products = _merge_products({}, ids, FREE_TERM_DAYS)

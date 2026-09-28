@@ -83,11 +83,48 @@ def test_the_welcome_page_does_not_claim_to_be_unrepeatable():
 
 @pytest.mark.parametrize("page", ["Payment still processing", "Keep your repository secret"])
 def test_every_lost_secret_route_points_at_the_same_place(page):
-    # Three pages say what to do about a lost secret; all three must send
-    # the customer somewhere that answers, which is the CLI's `show`.
+    # Every page that says anything about a lost secret must send the
+    # customer somewhere that answers. That used to be "write to us" on all
+    # of them; now it is /recover where mail can carry it and writing in
+    # where it cannot, which is what _lost_secret_line decides.
     assert page in GATEWAY
     section = GATEWAY.split(page, 1)[1][:600]
-    assert "Engineering Dynamics Company" in section
+    assert "Engineering Dynamics Company" in section or "_lost_secret_line" in section
+
+
+def test_the_lost_secret_line_offers_recovery_when_mail_can_carry_it():
+    """/recover was built, tested and live while nothing linked to it, so
+    the page a customer read on losing their secret still told them to
+    write in -- the support request /recover exists to remove."""
+    body = GATEWAY.split("def _lost_secret_line(", 1)[1].split("\ndef ", 1)[0]
+    offer = body.split("if mail.configured():", 1)[1]
+    assert '/recover' in offer.split("return", 2)[1]
+
+
+def test_the_lost_secret_line_falls_back_to_writing_in():
+    """With no key set nothing sends and /recover still answers 'on its
+    way' -- it has to -- so sending them there would be sending them
+    somewhere that cannot help and will not say so."""
+    body = GATEWAY.split("def _lost_secret_line(", 1)[1].split("\ndef ", 1)[0]
+    fallback = body.split("if mail.configured():", 1)[1].split("return", 2)[2]
+    assert "Engineering Dynamics Company" in fallback
+    assert "/recover" not in fallback
+
+
+def test_every_page_that_mentions_a_lost_secret_uses_the_one_line():
+    # Three pages and a Blender dialog; a fourth wording drifting out of
+    # step with the other three is how one of them ends up still telling
+    # customers to write in.
+    assert GATEWAY.count("{_lost_secret_line()}") == 3
+
+
+def test_the_blender_dialog_names_the_recovery_page_too():
+    """The 401 is what a customer sees at the moment they discover the
+    secret they had is gone -- the single best moment to say where to get
+    another."""
+    detail = GATEWAY.split("A valid EDC Software repository secret", 1)[1][:700]
+    assert "extensions.edccorp.com/recover" in detail
+    assert "mail.configured()" in detail
 
 
 def test_the_token_is_still_created_after_payment_not_before():

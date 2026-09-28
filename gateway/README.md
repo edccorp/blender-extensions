@@ -89,12 +89,18 @@ Day-to-day, from the repo root:
 python tools/customer.py add "Acme Reconstruction LLC" --email buyer@acme.com
 python tools/customer.py add "Smith Engineering" --products recon_toolkit,point_cloud_toolkit
 python tools/customer.py list
+python tools/customer.py needs-email
 python tools/customer.py set-email "Smith Engineering" ops@smitheng.com
 python tools/customer.py show buyer@acme.com
 python tools/customer.py reissue "Acme Reconstruction LLC"
 python tools/customer.py set-products "Smith Engineering" --products "*"
 python tools/customer.py revoke "Acme Reconstruction LLC"
 ```
+
+`needs-email` prints the customers with no address on file — the backfill
+list, names only, no secrets on screen. They are the ones `/recover`
+cannot help: it finds nothing for them and answers "on its way" anyway,
+because it must, so nothing arrives and nothing says why.
 
 Give `add` an `--email` whenever you know it. It is what `/recover`
 matches on, so a customer with an address on file can have their secret
@@ -348,6 +354,14 @@ Two things send:
   creates it, which is what finally answers a payment that settles after the
   buyer has closed the tab. Only on a genuinely new provisioning, so a
   reloaded `/welcome` or a replayed webhook cannot send it twice.
+The page is linked from every place a customer reads about a lost secret:
+both `/welcome` variants, the already-registered `/register` page, and the
+401 Blender shows when the secret is missing or wrong. All four fall back
+to "contact Engineering Dynamics Company" when mail is not configured —
+`/recover` answers "on its way" whether or not it sent anything, so
+pointing customers at it while nothing can send would send them somewhere
+that cannot help and will not say so.
+
 - **`/recover`** — a customer enters the address they bought with and the
   secret is emailed **to the address on the record**, never shown on the
   page and never sent to the address typed in. The answer is identical

@@ -18,6 +18,7 @@ Usage:
     python tools/customer.py add "Acme Reconstruction LLC" --email buyer@acme.com
     python tools/customer.py add "Smith Engineering" --products recon_toolkit,point_cloud_toolkit
     python tools/customer.py list
+    python tools/customer.py needs-email
     python tools/customer.py set-email "Acme Reconstruction LLC" buyer@acme.com
     python tools/customer.py show buyer@acme.com
     python tools/customer.py reissue "Acme Reconstruction LLC"
@@ -296,6 +297,36 @@ def cmd_show(args) -> None:
     print(setup_lines(token))
 
 
+def cmd_needs_email(args) -> None:
+    """The customers with no address on file, which is the backfill list.
+
+    They are the ones /recover cannot help: it finds nothing for them and
+    answers "on its way" anyway -- it has to, or it becomes a way to ask
+    which firms buy from us one address at a time -- so nothing arrives and
+    nothing says why. Every entry made before the gateway could send is in
+    this state.
+
+    Names only, deliberately. Working through this list does not need a
+    single repository secret on screen, and `list` putting them all there is
+    what `show` exists to avoid.
+    """
+    customers, _ = fetch()
+    missing = sorted((name_of(v) for v in customers.values() if not email_of(v)),
+                     key=str.lower)
+    if not customers:
+        print("no customers yet")
+        return
+    if not missing:
+        print(f"All {len(customers)} customers have an address on file — "
+              "every one of them can use /recover.")
+        return
+    print(f"{len(missing)} of {len(customers)} customers have no address on "
+          "file and cannot recover their own secret:\n")
+    for name in missing:
+        print(f"  {name}")
+    print("\nAdd one as you learn it:  customer.py set-email <name> <address>")
+
+
 def cmd_set_email(args) -> None:
     """Record an address for a customer who has none.
 
@@ -377,6 +408,9 @@ def main() -> None:
     p.add_argument("--products", help="comma-separated ids, or * for all")
     p.add_argument("--expires", help="YYYY-MM-DD — updates stop after this date; omit for perpetual")
     p.set_defaults(func=cmd_set_products)
+
+    p = sub.add_parser("needs-email", help="list customers with no address on file (the /recover backfill)")
+    p.set_defaults(func=cmd_needs_email)
 
     p = sub.add_parser("set-email", help="record a customer's address so they can use /recover")
     p.add_argument("customer", help="customer name, email, or repository secret")

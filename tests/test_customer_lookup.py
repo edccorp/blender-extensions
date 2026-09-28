@@ -365,3 +365,74 @@ def test_set_email_is_reachable_and_takes_both_arguments(cli):
 def test_add_offers_the_address_on_the_command_line(cli):
     block = SOURCE.split('sub.add_parser("add"', 1)[1].split("p.set_defaults", 1)[0]
     assert 'p.add_argument("--email"' in block
+
+
+# ------------------------------------------------------- the backfill list
+
+def test_needs_email_lists_the_customers_who_have_none(cli, capsys):
+    # They are the ones /recover cannot help, and there is no other way to
+    # see who they are without reading the whole file.
+    cli.state["customers"] = {
+        "edc_aaa": customer("Acme LLC", "buyer@acme.com"),
+        "edc_bbb": customer("Other Co"),
+        "edc_ccc": "Third Party Ltd",
+    }
+    cli.cmd_needs_email(types.SimpleNamespace())
+    out = capsys.readouterr().out
+    assert "Other Co" in out
+    assert "Third Party Ltd" in out
+    assert "Acme LLC" not in out
+
+
+def test_needs_email_counts_them_against_the_whole_list(cli, capsys):
+    cli.state["customers"] = {
+        "edc_aaa": customer("Acme LLC", "buyer@acme.com"),
+        "edc_bbb": customer("Other Co"),
+    }
+    cli.cmd_needs_email(types.SimpleNamespace())
+    assert "1 of 2" in capsys.readouterr().out
+
+
+def test_needs_email_puts_no_secrets_on_screen(cli, capsys):
+    """Working through the backfill does not need a single one, and `list`
+    putting them all there is what `show` exists to avoid."""
+    cli.state["customers"] = {"edc_bbb": customer("Other Co")}
+    cli.cmd_needs_email(types.SimpleNamespace())
+    assert "edc_bbb" not in capsys.readouterr().out
+
+
+def test_needs_email_says_so_when_there_is_nothing_to_do(cli, capsys):
+    cli.state["customers"] = {"edc_aaa": customer("Acme LLC", "buyer@acme.com")}
+    cli.cmd_needs_email(types.SimpleNamespace())
+    out = capsys.readouterr().out
+    assert "All 1 customers" in out
+    assert "Acme LLC" not in out
+
+
+def test_needs_email_on_an_empty_list_does_not_claim_success(cli, capsys):
+    cli.cmd_needs_email(types.SimpleNamespace())
+    assert "no customers yet" in capsys.readouterr().out
+
+
+def test_needs_email_changes_nothing(cli):
+    cli.state["customers"] = {"edc_bbb": customer("Other Co")}
+    cli.cmd_needs_email(types.SimpleNamespace())
+    assert cli.state["saved"] == []
+
+
+def test_needs_email_names_the_command_that_fixes_it(cli, capsys):
+    cli.state["customers"] = {"edc_bbb": customer("Other Co")}
+    cli.cmd_needs_email(types.SimpleNamespace())
+    assert "set-email" in capsys.readouterr().out
+
+
+def test_an_empty_address_counts_as_missing(cli, capsys):
+    # A record can carry the key with nothing in it; /recover cannot send
+    # there either.
+    cli.state["customers"] = {"edc_bbb": {"name": "Other Co", "email": ""}}
+    cli.cmd_needs_email(types.SimpleNamespace())
+    assert "Other Co" in capsys.readouterr().out
+
+
+def test_needs_email_is_reachable(cli):
+    assert 'sub.add_parser("needs-email"' in SOURCE
