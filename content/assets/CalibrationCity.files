@@ -1,0 +1,13 @@
+# Files the CalibrationCity sample .blend needs beside it.
+#
+# A movie clip cannot be packed into a .blend, so the scene's footage has
+# to arrive as real files in the same folder, where its relative paths
+# (//CalibrationImage.jpg) find it. CamMatch reads this list when it
+# downloads the sample, so footage can be renamed or added to here without
+# every installed copy of the add-on needing an update to learn the names.
+#
+# One plain filename per line. Anything with a path separator in it is
+# ignored, because this decides what gets written into a folder on
+# somebody else's machine.
+CalibrationImage.jpg
+DistortedImage.jpg
