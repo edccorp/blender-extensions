@@ -18,11 +18,17 @@ Usage:
     python tools/customer.py add "Acme Reconstruction LLC"
     python tools/customer.py add "Smith Engineering" --products recon_toolkit,point_cloud_toolkit
     python tools/customer.py list
+    python tools/customer.py show buyer@acme.com
+    python tools/customer.py reissue "Acme Reconstruction LLC"
     python tools/customer.py set-products "Smith Engineering" --products "*"
     python tools/customer.py revoke "Acme Reconstruction LLC"
 
-`add` prints the new repository secret exactly once — send it to the customer, it is
-not stored anywhere except the customers file.
+A customer who has lost their secret is looked up with `show`, by name,
+email or the secret itself — the gateway deliberately refuses to re-display
+one to anyone who only proved they can type an email address, and points
+them here instead. Use `reissue` when the secret may have been seen by
+somebody else rather than merely mislaid: sending the same one back cannot
+help when the problem is who else has it.
 """
 
 import argparse
@@ -123,6 +129,11 @@ def name_of(value) -> str:
     return value if isinstance(value, str) else value.get("name", "unnamed")
 
 
+def email_of(value) -> str:
+    """The address on an entry, or "" for the compact plain-string form."""
+    return "" if isinstance(value, str) else (value.get("email") or "")
+
+
 def products_of(value) -> list[str]:
     """Display form: 'recon_toolkit (through 2027-07-03)' for dated terms."""
     if isinstance(value, str):
@@ -134,10 +145,20 @@ def products_of(value) -> list[str]:
 
 
 def find(customers: dict, key: str) -> list[str]:
-    """Match by exact repository secret first, then case-insensitive customer name."""
+    """Match by exact repository secret, then customer name, then email.
+
+    Email is here because it is what a support request arrives as: someone
+    who has lost their secret writes in from the address they bought with,
+    and looking them up should not mean scrolling a list for a name they
+    may have spelled differently.
+    """
     if key in customers:
         return [key]
-    return [t for t, v in customers.items() if name_of(v).lower() == key.lower()]
+    wanted = key.lower()
+    by_name = [t for t, v in customers.items() if name_of(v).lower() == wanted]
+    if by_name:
+        return by_name
+    return [t for t, v in customers.items() if email_of(v).lower() == wanted]
 
 
 def parse_products(raw: str | None) -> list[str] | None:
@@ -169,11 +190,22 @@ def entry_for(name: str, products: list[str] | None, expires: str | None = None)
 def resolve_one(customers: dict, key: str) -> str:
     matches = find(customers, key)
     if not matches:
-        die(f"no customer matches {key!r} (by repository secret or name)")
+        die(f"no customer matches {key!r} (by repository secret, name or email)")
     if len(matches) > 1:
         listing = "\n".join(f"  {t}  {name_of(customers[t])}" for t in matches)
         die(f"{key!r} matches multiple customers — use the repository secret instead:\n{listing}")
     return matches[0]
+
+
+def setup_lines(token: str) -> str:
+    """What the customer needs in Blender, ready to paste into a reply."""
+    return (
+        f"\n  Repository secret:\n\n    {token}\n\n"
+        "Blender setup for the customer: Preferences > Get Extensions >\n"
+        "Repositories > + Add Remote Repository >\n"
+        "  URL:    https://extensions.edccorp.com/index.json\n"
+        "  tick 'Requires Access Token', paste the repository secret into Secret"
+    )
 
 
 def cmd_add(args) -> None:
@@ -222,6 +254,48 @@ def cmd_set_products(args) -> None:
     print(f"{name} now has repository access to: {shown} (live within a minute)")
 
 
+def cmd_show(args) -> None:
+    """Look one customer up, for when they write in having lost their secret.
+
+    The gateway refuses to re-display a secret to anyone who only proved
+    they can type an email address, and tells them to contact Engineering
+    Dynamics Company instead. This is what answers that: one customer, not
+    the whole list, so a support reply does not begin by putting every
+    other customer's secret on screen.
+    """
+    customers, _ = fetch()
+    token = resolve_one(customers, args.customer)
+    value = customers[token]
+    print(f"{name_of(value)}")
+    if email_of(value):
+        print(f"  email:    {email_of(value)}")
+    print(f"  products: {', '.join(products_of(value))}")
+    print(setup_lines(token))
+
+
+def cmd_reissue(args) -> None:
+    """Replace a customer's secret, keeping everything else about them.
+
+    For a secret that may have been seen by someone else rather than merely
+    mislaid -- a forwarded email, a shared screen. Sending the same one
+    back cannot help there, because the problem is who else has it.
+
+    The entry is re-keyed rather than rebuilt, so an email address, a
+    purchase history and a dated term survive the change; rebuilding it
+    from a name and products would quietly drop all three.
+    """
+    customers, sha = fetch()
+    token = resolve_one(customers, args.customer)
+    value = customers.pop(token)
+    new_token = "edc_" + secrets.token_urlsafe(18)
+    customers[new_token] = value
+    save(customers, sha, f"Reissue repository secret: {name_of(value)}")
+    print(f"Reissued for {name_of(value)}. The old secret stops working "
+          "within a minute;")
+    print("their Blender will report an access error until the new one is in.")
+    print(setup_lines(new_token))
+
+
 def cmd_revoke(args) -> None:
     customers, sha = fetch()
     token = resolve_one(customers, args.customer)
@@ -245,13 +319,21 @@ def main() -> None:
     p.set_defaults(func=cmd_list)
 
     p = sub.add_parser("set-products", help="change the products included with a customer's repository access")
-    p.add_argument("customer", help="customer name or repository secret")
+    p.add_argument("customer", help="customer name, email, or repository secret")
     p.add_argument("--products", help="comma-separated ids, or * for all")
     p.add_argument("--expires", help="YYYY-MM-DD — updates stop after this date; omit for perpetual")
     p.set_defaults(func=cmd_set_products)
 
+    p = sub.add_parser("show", help="show one customer's repository secret (lost-secret requests)")
+    p.add_argument("customer", help="customer name, email, or repository secret")
+    p.set_defaults(func=cmd_show)
+
+    p = sub.add_parser("reissue", help="give a customer a new repository secret and retire the old one")
+    p.add_argument("customer", help="customer name, email, or repository secret")
+    p.set_defaults(func=cmd_reissue)
+
     p = sub.add_parser("revoke", help="remove a customer's access")
-    p.add_argument("customer", help="customer name or repository secret")
+    p.add_argument("customer", help="customer name, email, or repository secret")
     p.set_defaults(func=cmd_revoke)
 
     args = parser.parse_args()
