@@ -33,10 +33,10 @@ def test_sending_is_off_until_it_is_configured():
     nothing until EMAIL_HOST and the rest are set, so a page may only
     promise an email where one will actually be sent."""
     body = MAIL.split("def configured(", 1)[1].split("\ndef ", 1)[0]
-    assert "HOST and USER and PASSWORD and FROM" in body
-    send = MAIL.split("def send(", 1)[1].split("\ndef ", 1)[0]
+    assert "API_KEY and FROM" in body
+    send = MAIL.split("async def send(", 1)[1].split("\ndef ", 1)[0]
     assert "if not (configured() and to_address):" in send
-    assert send.index("configured()") < send.index("smtplib.SMTP")
+    assert send.index("configured()") < send.index("client.post")
 
 
 def test_a_page_promises_an_email_only_where_one_is_sent():

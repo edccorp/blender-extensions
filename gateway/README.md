@@ -299,7 +299,7 @@ and that endpoint can be added.
 
 ## Emailing customers their repository secret
 
-Off unless configured. With `EMAIL_HOST` unset nothing is sent and every
+Off unless configured. With `RESEND_API_KEY` unset nothing is sent and every
 page behaves exactly as it did before — including the checkout pages, which
 only promise an email where one will actually go out.
 
@@ -307,34 +307,23 @@ Railway → Variables:
 
 | Variable | Example | Notes |
 |---|---|---|
-| `EMAIL_HOST` | `smtp.office365.com` | GoDaddy's older Workspace Email is `smtpout.secureserver.net` |
-| `EMAIL_PORT` | `587` | STARTTLS; the default |
-| `EMAIL_USER` | `software@edccorp.com` | a **dedicated** mailbox, not a person's |
-| `EMAIL_PASSWORD` | *app password* | see below |
-| `EMAIL_FROM` | `software@edccorp.com` | defaults to `EMAIL_USER` |
+| `RESEND_API_KEY` | `re_…` | Resend → API keys; sending permission is enough |
+| `EMAIL_FROM` | `software@edccorp.com` | must be on a domain verified in Resend |
+| `EMAIL_REPLY_TO` | `support@edccorp.com` | optional; unset, replies go to `EMAIL_FROM` |
+| `EMAIL_TIMEOUT` | `15` | seconds; the default |
 
-Use a mailbox of its own. A mailbox credential can read everything in that
-inbox, not only send from it, so the one in Railway's environment should
-reach a mailbox that holds nothing. It still wants to be an address someone
-reads: people reply to "here is your licence key" whatever it is called.
+Verify `edccorp.com` under Resend → Domains first. It gives DKIM and SPF
+records to add at GoDaddy, where the DNS is. Until the domain is verified
+Resend refuses anything sent from an address on it, and the refusal is
+logged with its reason.
 
-Microsoft 365 needs SMTP AUTH enabled for that mailbox (Microsoft disables
-it by default on newer tenants) and an app password if the account has MFA.
-Check both from the deployed container rather than from a laptop — Railway's
-egress is what matters:
+Sending from the company's own Microsoft mailbox over SMTP was the other
+route, and the history has that implementation. It needed a licensed
+Microsoft seat this tenant had none spare of, and SMTP reports delivery to
+the next hop and nothing after — so a licence key that silently failed to
+arrive looked exactly like one that was read.
 
-```
-python -c "
-import smtplib
-s = smtplib.SMTP('smtp.office365.com', 587, timeout=10)
-s.ehlo(); s.starttls()
-code, caps = s.ehlo()
-print('AUTH advertised:', b'AUTH' in caps)
-s.quit()
-"
-```
-
-Two things then send:
+Two things send:
 
 - **A new purchase** — the secret is emailed when `_provision_purchase`
   creates it, which is what finally answers a payment that settles after the
@@ -347,8 +336,7 @@ Two things then send:
   used to ask which firms buy from us; and one address gets at most one
   email every five minutes.
 
-Delivery is fire-and-check-the-log: SMTP reports acceptance by the next hop
-and nothing after it, so a bounce is invisible here. `[gateway] mail:` and
-`[gateway] recover:` lines in Railway's log say `sent` or `NOT SENT` for
-every attempt. If silent non-delivery ever becomes the problem, `mail.send`
-is the only function to reimplement against a transactional provider.
+`[gateway] mail:` and `[gateway] recover:` lines in Railway's log say `sent`
+or `NOT SENT` for every attempt, and a refusal is logged with Resend's own
+reason. Delivery, bounces and complaints are in Resend's own dashboard,
+which is the thing SMTP could not have told us.

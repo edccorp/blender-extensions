@@ -11,6 +11,7 @@ to a customer -- otherwise it becomes a way to ask which firms buy from us,
 one address at a time.
 """
 
+import asyncio
 import importlib.util
 import pathlib
 import sys
@@ -24,10 +25,25 @@ MAIL_PATH = ROOT / "gateway" / "mail.py"
 MAIL_SOURCE = MAIL_PATH.read_text()
 
 
+def _stub_httpx():
+    """A stand-in for httpx, so these tests need none of the gateway's
+    runtime dependencies. Every test replaces AsyncClient anyway; this
+    only has to exist for the import."""
+    if "httpx" in sys.modules:
+        return
+    try:
+        import httpx  # noqa: F401
+    except ImportError:
+        module = types.ModuleType("httpx")
+        module.AsyncClient = object
+        sys.modules["httpx"] = module
+
+
 def load_mail(monkeypatch, **env):
     """mail.py with a given environment, since its config is read at import."""
-    for key in ("EMAIL_HOST", "EMAIL_PORT", "EMAIL_USER", "EMAIL_PASSWORD",
-                "EMAIL_FROM", "EMAIL_TIMEOUT"):
+    _stub_httpx()
+    for key in ("RESEND_API_KEY", "EMAIL_FROM", "EMAIL_REPLY_TO",
+                "EMAIL_TIMEOUT"):
         monkeypatch.delenv(key, raising=False)
     for key, value in env.items():
         monkeypatch.setenv(key, value)
@@ -38,11 +54,39 @@ def load_mail(monkeypatch, **env):
 
 
 CONFIGURED = {
-    "EMAIL_HOST": "smtp.office365.com",
-    "EMAIL_USER": "software@edccorp.com",
-    "EMAIL_PASSWORD": "app-password",
+    "RESEND_API_KEY": "re_test_key",
     "EMAIL_FROM": "software@edccorp.com",
 }
+
+
+class FakeResponse:
+    def __init__(self, status_code=200, text='{"id":"abc"}'):
+        self.status_code = status_code
+        self.text = text
+
+
+def fake_client(monkeypatch, mail, response=None, explode=None):
+    """Replace httpx.AsyncClient with one that records the request."""
+    sent = {}
+
+    class Client:
+        def __init__(self, *args, **kwargs):
+            sent["timeout"] = kwargs.get("timeout")
+
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, *exc):
+            return False
+
+        async def post(self, url, json=None, headers=None):
+            if explode is not None:
+                raise explode
+            sent.update(url=url, json=json, headers=headers)
+            return response or FakeResponse()
+
+    monkeypatch.setattr(mail.httpx, "AsyncClient", Client)
+    return sent
 
 
 # ------------------------------------------------------------- off by default
@@ -52,10 +96,10 @@ def test_nothing_sends_until_it_is_configured(monkeypatch):
     happening because a module was imported."""
     mail = load_mail(monkeypatch)
     assert mail.configured() is False
-    assert mail.send("buyer@acme.com", "subject", "body") is False
+    assert asyncio.run(mail.send("buyer@acme.com", "subject", "body")) is False
 
 
-@pytest.mark.parametrize("missing", ["EMAIL_HOST", "EMAIL_USER", "EMAIL_PASSWORD"])
+@pytest.mark.parametrize("missing", ["RESEND_API_KEY", "EMAIL_FROM"])
 def test_half_a_configuration_is_no_configuration(monkeypatch, missing):
     env = {k: v for k, v in CONFIGURED.items() if k != missing}
     assert load_mail(monkeypatch, **env).configured() is False
@@ -65,22 +109,30 @@ def test_a_full_configuration_is_ready(monkeypatch):
     assert load_mail(monkeypatch, **CONFIGURED).configured() is True
 
 
-def test_the_from_address_falls_back_to_the_login(monkeypatch):
-    env = {k: v for k, v in CONFIGURED.items() if k != "EMAIL_FROM"}
-    mail = load_mail(monkeypatch, **env)
-    assert mail.FROM == "software@edccorp.com"
-    assert mail.configured() is True
+def test_a_reply_to_is_optional(monkeypatch):
+    # Unset, replies go to the sending address, which is the old behaviour.
+    mail = load_mail(monkeypatch, **CONFIGURED)
+    assert "reply_to" not in mail.payload("buyer@acme.com", "s", "b")
+
+
+def test_a_reply_to_is_used_when_given(monkeypatch):
+    # For sending from an address nobody reads while replies reach a list
+    # that several people do.
+    mail = load_mail(monkeypatch, EMAIL_REPLY_TO="support@edccorp.com",
+                     **CONFIGURED)
+    assert mail.payload("buyer@acme.com", "s", "b")["reply_to"] == "support@edccorp.com"
 
 
 # --------------------------------------------------------------- the message
 
 def test_the_message_is_addressed_and_plain_text(monkeypatch):
     mail = load_mail(monkeypatch, **CONFIGURED)
-    message = mail.build("buyer@acme.com", "Your secret", "body text")
-    assert message["To"] == "buyer@acme.com"
-    assert message["From"] == "software@edccorp.com"
-    assert message["Subject"] == "Your secret"
-    assert message.get_content_type() == "text/plain"
+    message = mail.payload("buyer@acme.com", "Your secret", "body text")
+    assert message["to"] == ["buyer@acme.com"]
+    assert message["from"] == "software@edccorp.com"
+    assert message["subject"] == "Your secret"
+    assert message["text"] == "body text"
+    assert "html" not in message
 
 
 def test_the_purchase_email_carries_the_secret_and_what_to_do_with_it(monkeypatch):
@@ -110,36 +162,57 @@ def test_a_purchase_of_nothing_named_still_reads_as_a_sentence(monkeypatch):
 
 # ----------------------------------------------------- failure is not fatal
 
-def test_a_failing_mail_server_does_not_raise(monkeypatch, capsys):
+def test_a_send_that_goes_out_is_addressed_and_authenticated(monkeypatch):
+    mail = load_mail(monkeypatch, **CONFIGURED)
+    sent = fake_client(monkeypatch, mail)
+    assert asyncio.run(mail.send("buyer@acme.com", "Your secret", "body")) is True
+    assert sent["url"] == "https://api.resend.com/emails"
+    assert sent["json"]["to"] == ["buyer@acme.com"]
+    assert sent["headers"]["Authorization"] == "Bearer re_test_key"
+    assert sent["timeout"] == mail.TIMEOUT
+
+
+def test_an_unreachable_api_does_not_raise(monkeypatch, capsys):
     """Every caller is doing something more important -- provisioning a
     purchase, answering a form -- and none may fail because mail was slow."""
     mail = load_mail(monkeypatch, **CONFIGURED)
-
-    def explode(*args, **kwargs):
-        raise OSError("connection reset")
-    monkeypatch.setattr(mail.smtplib, "SMTP", explode)
-
-    assert mail.send("buyer@acme.com", "s", "b") is False
+    fake_client(monkeypatch, mail, explode=OSError("connection reset"))
+    assert asyncio.run(mail.send("buyer@acme.com", "s", "b")) is False
     assert "could not email" in capsys.readouterr().out
+
+
+def test_a_refusal_is_a_false_and_says_why(monkeypatch, capsys):
+    """An unverified domain is refused with a reason, and that reason is
+    the one thing worth having in the log."""
+    mail = load_mail(monkeypatch, **CONFIGURED)
+    fake_client(monkeypatch, mail,
+                response=FakeResponse(403, '{"message":"domain not verified"}'))
+    assert asyncio.run(mail.send("buyer@acme.com", "s", "b")) is False
+    out = capsys.readouterr().out
+    assert "403" in out and "domain not verified" in out
 
 
 def test_a_send_with_no_address_is_not_attempted(monkeypatch):
     mail = load_mail(monkeypatch, **CONFIGURED)
-    monkeypatch.setattr(mail.smtplib, "SMTP",
-                        lambda *a, **k: pytest.fail("tried to send to nobody"))
-    assert mail.send("", "s", "b") is False
+    sent = fake_client(monkeypatch, mail)
+    assert asyncio.run(mail.send("", "s", "b")) is False
+    assert "url" not in sent, "tried to send to nobody"
 
 
-def test_the_password_is_not_printed_when_sending_fails(monkeypatch, capsys):
-    # The log line goes to Railway's console, which is not where a mailbox
-    # password should end up.
+def test_the_api_key_is_not_printed_when_sending_fails(monkeypatch, capsys):
+    # The log line goes to Railway's console, which is not where a sending
+    # credential should end up.
     mail = load_mail(monkeypatch, **CONFIGURED)
+    fake_client(monkeypatch, mail, explode=OSError("connection reset"))
+    asyncio.run(mail.send("buyer@acme.com", "s", "b"))
+    assert "re_test_key" not in capsys.readouterr().out
 
-    def explode(*args, **kwargs):
-        raise OSError("connection reset")
-    monkeypatch.setattr(mail.smtplib, "SMTP", explode)
-    mail.send("buyer@acme.com", "s", "b")
-    assert "app-password" not in capsys.readouterr().out
+
+def test_a_refusal_does_not_print_the_api_key_either(monkeypatch, capsys):
+    mail = load_mail(monkeypatch, **CONFIGURED)
+    fake_client(monkeypatch, mail, response=FakeResponse(401, '{"message":"bad key"}'))
+    asyncio.run(mail.send("buyer@acme.com", "s", "b"))
+    assert "re_test_key" not in capsys.readouterr().out
 
 
 # ------------------------------------------------------- how it is wired in
@@ -153,12 +226,13 @@ def test_the_purchase_email_goes_only_on_a_new_provisioning():
     assert body.index("already_processed\": True") < body.index("_email_new_purchase(")
 
 
-def test_sending_runs_off_the_event_loop():
-    """smtplib blocks. On the event loop, a slow mail server would stall
-    every other request the gateway is serving, including Blender's."""
+def test_sending_is_awaited_rather_than_blocking_the_loop():
+    """httpx is already how this service talks to Stripe and GitHub, so
+    there is nothing to block the event loop with -- but only if the call
+    is awaited rather than run synchronously."""
     for helper in ("_email_new_purchase", "async def recover("):
         body = GATEWAY.split(helper, 1)[1].split("\n@app", 1)[0]
-        assert "asyncio.to_thread(" in body, f"{helper} blocks the loop"
+        assert "await mail.send(" in body, f"{helper} does not await the send"
 
 
 def test_a_purchase_with_no_address_does_not_reach_the_mail_layer():
@@ -168,7 +242,18 @@ def test_a_purchase_with_no_address_does_not_reach_the_mail_layer():
     investigated later."""
     body = GATEWAY.split("async def _email_new_purchase(", 1)[1].split("\nasync def ", 1)[0]
     assert "if not (email and mail.configured()):" in body
-    assert body.index("mail.configured()") < body.index("asyncio.to_thread")
+    assert body.index("mail.configured()") < body.index("await mail.send(")
+
+
+def test_the_purchase_email_goes_to_the_buyer():
+    """Not to the sending address, and not to anyone else on the record.
+    Structural, because importing the gateway means importing FastAPI and
+    reading the live environment -- but it pins the one argument that
+    decides who gets somebody's licence key."""
+    body = GATEWAY.split("async def _email_new_purchase(", 1)[1].split("\nasync def ", 1)[0]
+    call = body.split("await mail.send(", 1)[1]
+    assert call.lstrip().startswith("email,"), \
+        "the purchase email is addressed to something other than the buyer"
 
 
 def test_a_purchase_is_not_held_up_by_the_mail():
@@ -189,7 +274,7 @@ def test_recovery_sends_to_the_address_on_file_not_the_one_typed():
     the rightful owner asks, and typing somebody else's only mails that
     person."""
     body = recover_body()
-    assert 'mail.send, value["email"]' in body, \
+    assert 'await mail.send(\n            value["email"]' in body, \
         "the recovery email is addressed from the form, not from the record"
 
 

@@ -5,32 +5,32 @@ provisions through the webhook, minutes after the buyer has closed the tab
 -- their token exists and nothing tells them. And a customer who has lost
 their secret has, until now, had to write in and wait for a human.
 
-Deliberately small, and deliberately off by default: with no EMAIL_HOST
+Deliberately small, and deliberately off by default: with no RESEND_API_KEY
 configured nothing is sent and every caller carries on exactly as it did
-before. Sending is the kind of thing that should have to be switched on
-on purpose, not the kind that starts happening because a module was
-imported.
+before. Sending is the kind of thing that should have to be switched on on
+purpose, not the kind that starts happening because a module was imported.
 
-SMTP rather than a transactional provider because the domain already sends
-mail: SPF and DKIM are aligned for that mailbox, which is the part that
-otherwise decides whether a licence key lands in the inbox or the spam
-folder. The cost is that SMTP reports delivery to the next hop and nothing
-after it -- no bounces, no complaints. If that becomes the thing that
-hurts, `send` is the only function to reimplement.
+Resend over HTTPS rather than SMTP through the company mailbox. SMTP would
+have worked and was free of new vendors, but it wanted a licensed Microsoft
+seat this tenant did not have spare, and it reports delivery to the next hop
+and nothing after -- no bounces, no complaints, so a licence key that
+silently fails to arrive looks exactly like one that was read. Resend
+reports both, and its free tier is far above anything this sends. The
+earlier SMTP implementation is in the history if it is ever wanted.
 """
 
 import os
-import smtplib
-import ssl
-from email.message import EmailMessage
 
-HOST = os.environ.get("EMAIL_HOST", "").strip()
-PORT = int(os.environ.get("EMAIL_PORT", "587") or 587)
-USER = os.environ.get("EMAIL_USER", "").strip()
-PASSWORD = os.environ.get("EMAIL_PASSWORD", "")
-FROM = os.environ.get("EMAIL_FROM", "").strip() or USER
-#: How long to wait on the mail server. Short, because a purchase must not
-#: be held up by it: the token is already saved by the time this runs.
+import httpx
+
+API_URL = "https://api.resend.com/emails"
+API_KEY = os.environ.get("RESEND_API_KEY", "").strip()
+FROM = os.environ.get("EMAIL_FROM", "").strip()
+#: Optional. Where replies go, when that should not be the sending address
+#: -- a support list several people read, rather than an inbox nobody does.
+REPLY_TO = os.environ.get("EMAIL_REPLY_TO", "").strip()
+#: Short, because a purchase must not be held up by it: the token is
+#: already saved by the time this runs.
 TIMEOUT = float(os.environ.get("EMAIL_TIMEOUT", "15") or 15)
 
 CONTACT = "Engineering Dynamics Company"
@@ -38,46 +38,58 @@ CONTACT = "Engineering Dynamics Company"
 
 def configured():
     """Is there anywhere to send mail? Absent configuration means no."""
-    return bool(HOST and USER and PASSWORD and FROM)
+    return bool(API_KEY and FROM)
 
 
-def build(to_address, subject, body):
-    """The message, as a plain-text email.
+def payload(to_address, subject, body):
+    """The request Resend expects.
 
     Plain text on purpose: it is a licence key and setup steps, an HTML
     part would add nothing, and text is what survives every client and
     every spam filter unchanged.
     """
-    message = EmailMessage()
-    message["From"] = FROM
-    message["To"] = to_address
-    message["Subject"] = subject
-    message.set_content(body)
+    message = {
+        "from": FROM,
+        "to": [to_address],
+        "subject": subject,
+        "text": body,
+    }
+    if REPLY_TO:
+        message["reply_to"] = REPLY_TO
     return message
 
 
-def send(to_address, subject, body):
-    """Send one message. True when it was accepted, False otherwise.
+async def send(to_address, subject, body):
+    """Send one message. True when Resend accepted it, False otherwise.
 
     Never raises. Every caller is doing something more important than this
     -- provisioning a purchase, answering a form -- and none of them should
-    fail because a mail server was slow. A False is logged and the customer
+    fail because a mail API was slow. A False is logged and the customer
     still has the page in front of them.
+
+    Async rather than threaded: httpx is already how this service talks to
+    Stripe and GitHub, so there is nothing to block the event loop with.
     """
     if not (configured() and to_address):
         return False
     try:
-        with smtplib.SMTP(HOST, PORT, timeout=TIMEOUT) as server:
-            server.ehlo()
-            server.starttls(context=ssl.create_default_context())
-            server.ehlo()
-            server.login(USER, PASSWORD)
-            server.send_message(build(to_address, subject, body))
-        return True
+        async with httpx.AsyncClient(timeout=TIMEOUT) as client:
+            response = await client.post(
+                API_URL,
+                json=payload(to_address, subject, body),
+                headers={"Authorization": f"Bearer {API_KEY}"},
+            )
     except Exception as exc:                        # noqa: BLE001
         print(f"[gateway] ERROR: could not email {to_address}: "
               f"{type(exc).__name__}: {exc}")
         return False
+    if response.status_code >= 300:
+        # The body carries Resend's own reason -- an unverified domain, a
+        # rejected address -- which is the thing worth having in the log.
+        print(f"[gateway] ERROR: Resend refused mail to {to_address}: "
+              f"{response.status_code} {response.text[:300]}")
+        return False
+    return True
 
 
 def setup_steps():

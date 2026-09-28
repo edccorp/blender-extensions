@@ -53,7 +53,6 @@ Environment variables:
     CACHE_TTL        origin cache seconds (default 300)
 """
 
-import asyncio
 import base64
 import hashlib
 import hmac
@@ -541,15 +540,15 @@ async def _email_new_purchase(name: str, email: str, token: str, products) -> No
     from the already-processed branch above -- so this cannot turn into one
     email per page refresh.
 
-    Run off the event loop because smtplib blocks, and awaited rather than
-    fired and forgotten so that the log line lands in the same request. The
-    customer's page does not wait on the result: the token is saved before
-    this runs and the page shows it whether or not the mail got out.
+    Awaited rather than fired and forgotten, so the log line lands in the
+    same request as the purchase it belongs to. The customer's page is not
+    waiting on the result: the token is saved before this runs and the page
+    shows it whether or not the mail got out.
     """
     if not (email and mail.configured()):
         return
-    sent = await asyncio.to_thread(
-        mail.send, email,
+    sent = await mail.send(
+        email,
         "Your EDC Software repository secret",
         mail.purchase_body(name, token, _normalize_products(products)),
     )
@@ -1111,8 +1110,8 @@ async def recover(email: str = ""):
         if value.get("email", "").strip().lower() != wanted:
             continue
         _RECOVERY_SENT[wanted] = now
-        sent = await asyncio.to_thread(
-            mail.send, value["email"],
+        sent = await mail.send(
+            value["email"],
             "Your EDC Software repository secret",
             mail.recovery_body(value.get("name", "there"), token),
         )
