@@ -81,6 +81,11 @@ PAGES_BASE = "https://extensions.edccorp.com"
 REPOSITORY_URL = f"{PAGES_BASE}/index.json"
 STORE_URL = f"{PAGES_BASE}/store"
 ACCESS_URL = f"{PAGES_BASE}/access-and-licensing.html"
+#: Absolute, not "/recover". These pages are also served straight from
+#: GitHub Pages, where a root-relative link would land on
+#: edccorp.github.io/recover -- which does not exist. The route only
+#: lives on the gateway.
+RECOVER_URL = f"{PAGES_BASE}/recover"
 
 MIRROR_ZIPS = os.environ.get("MIRROR_ZIPS", "1").lower() not in ("0", "false", "no")
 
@@ -534,6 +539,8 @@ def render_access_licensing_page():
   <li>Enable <strong>Requires Access Token</strong> and paste your token into the repository <strong>Secret</strong> field.</li>
   <li>Install your licensed products from <strong>Get Extensions</strong>. Blender will notify you when updates are available.</li>
 </ol>
+<p>Lost the token, or setting up a new computer? <a href="{RECOVER_URL}">Have it emailed
+to you</a> — enter the address you bought with and it goes to the address on your account.</p>
 
 <div class="callout">
   <h2>Need another product?</h2>
@@ -561,6 +568,11 @@ def render_access_licensing_page():
   <p>Paste it into the <strong>Secret</strong> field after enabling <strong>Requires Access Token</strong> on the EDC Software repository in Blender preferences.</p>
   <h3>Can I replace an old manual add-on install?</h3>
   <p>Yes. Disable or remove the old add-on from <strong>Edit → Preferences → Add-ons</strong>, then install the extension version from the EDC Software repository.</p>
+  <h3>I lost my access token. How do I get it back?</h3>
+  <p><a href="{RECOVER_URL}">Recover it here</a>. Enter the email address you bought with
+  and the token is sent to the address on your account — it is never shown on the page, so
+  a token cannot be read off it by someone who only knows your email. If nothing arrives,
+  check spam, then contact EDC support.</p>
   <h3>Who should I contact for help?</h3>
   <p>Contact EDC support for licensing, training, and installation assistance.</p>
 </div>

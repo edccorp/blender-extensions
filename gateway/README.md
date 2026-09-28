@@ -355,8 +355,14 @@ Two things send:
   buyer has closed the tab. Only on a genuinely new provisioning, so a
   reloaded `/welcome` or a replayed webhook cannot send it twice.
 The page is linked from every place a customer reads about a lost secret:
-both `/welcome` variants, the already-registered `/register` page, and the
-401 Blender shows when the secret is missing or wrong. All four fall back
+both `/welcome` variants, the already-registered `/register` page, the 401
+Blender shows when the secret is missing or wrong, and — on the public
+site — the Access & Licensing page, in the setup steps and as its own FAQ
+entry. That last one is the only route for somebody who has uninstalled or
+is setting up a second machine and never sees a 401 at all. It is built by
+`tools/build_index.py` and must use the absolute `RECOVER_URL`: those
+pages are also served straight from GitHub Pages, where `/recover` would
+land on `edccorp.github.io/recover`. All four fall back
 to "contact Engineering Dynamics Company" when mail is not configured —
 `/recover` answers "on its way" whether or not it sent anything, so
 pointing customers at it while nothing can send would send them somewhere
