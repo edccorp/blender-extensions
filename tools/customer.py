@@ -15,9 +15,10 @@ One-time setup on your machine:
         (optional; this is the default)
 
 Usage:
-    python tools/customer.py add "Acme Reconstruction LLC"
+    python tools/customer.py add "Acme Reconstruction LLC" --email buyer@acme.com
     python tools/customer.py add "Smith Engineering" --products recon_toolkit,point_cloud_toolkit
     python tools/customer.py list
+    python tools/customer.py set-email "Acme Reconstruction LLC" buyer@acme.com
     python tools/customer.py show buyer@acme.com
     python tools/customer.py reissue "Acme Reconstruction LLC"
     python tools/customer.py set-products "Smith Engineering" --products "*"
@@ -181,10 +182,25 @@ def parse_expires(raw: str | None) -> str | None:
         die(f"--expires must be a YYYY-MM-DD date, got {raw!r}")
 
 
-def entry_for(name: str, products: list[str] | None, expires: str | None = None):
+def entry_for(name: str, products: list[str] | None, expires: str | None = None,
+              email: str | None = None):
+    """A customer record: the compact plain string, or a dict when it needs one.
+
+    An email is worth having on every customer now that the gateway can
+    send: it is what lets them recover their own secret at /recover instead
+    of writing in. Entries made before this carry no address, which is why
+    there is a set-email command as well.
+    """
+    if not (products or expires or email):
+        return name          # a name and nothing else stays a plain string
+    entry: dict = {"name": name}
+    if email:
+        entry["email"] = email
     if expires:
-        return {"name": name, "products": {p: expires for p in (products or ["*"])}}
-    return name if products is None else {"name": name, "products": products}
+        entry["products"] = {p: expires for p in (products or ["*"])}
+    elif products is not None:
+        entry["products"] = products
+    return entry
 
 
 def resolve_one(customers: dict, key: str) -> str:
@@ -213,12 +229,19 @@ def cmd_add(args) -> None:
     products = parse_products(args.products)
     expires = parse_expires(args.expires)
     token = "edc_" + secrets.token_urlsafe(18)
-    customers[token] = entry_for(args.name, products, expires)
+    email = (args.email or "").strip()
+    customers[token] = entry_for(args.name, products, expires, email)
     save(customers, sha, f"Add customer: {args.name}")
     shown = ", ".join(products) if products else "all products"
     if expires:
         shown += f", updates through {expires}"
     print(f"Added {args.name} ({shown}). Live on the gateway within a minute.")
+    if not email:
+        # Without one they cannot use /recover, and a lost secret comes
+        # back here as a support request instead of answering itself.
+        print("No email recorded — they will not be able to recover this "
+              "secret themselves. Add one with: customer.py set-email "
+              f"{args.name!r} <address>")
     print(f"\n  Repository secret (send to customer, shown only once):\n\n    {token}\n")
     print("Blender setup for the customer: Preferences > Get Extensions >")
     print("Repositories > + Add Remote Repository >")
@@ -273,6 +296,35 @@ def cmd_show(args) -> None:
     print(setup_lines(token))
 
 
+def cmd_set_email(args) -> None:
+    """Record an address for a customer who has none.
+
+    Entries made before the gateway could send carry no address at all, and
+    a customer without one cannot recover their own secret -- /recover
+    finds nothing for them and they are back to writing in. This is how
+    those get filled in as you learn them.
+    """
+    customers, sha = fetch()
+    token = resolve_one(customers, args.customer)
+    email = args.email.strip()
+    if "@" not in email:
+        die(f"{email!r} is not an email address")
+    value = customers[token]
+    if isinstance(value, str):
+        # The compact form is a name and nothing else; it has to become a
+        # record before it can hold anything.
+        value = {"name": value}
+        customers[token] = value
+    previous = value.get("email", "")
+    value["email"] = email
+    save(customers, sha, f"Set email for {name_of(value)}: {email}")
+    if previous and previous.lower() != email.lower():
+        print(f"Replaced {previous} with {email} for {name_of(value)}.")
+    else:
+        print(f"{name_of(value)} can now recover their own secret at "
+              f"/recover using {email}.")
+
+
 def cmd_reissue(args) -> None:
     """Replace a customer's secret, keeping everything else about them.
 
@@ -311,6 +363,8 @@ def main() -> None:
 
     p = sub.add_parser("add", help="add a customer and print their new repository secret")
     p.add_argument("name", help='customer label, e.g. "Acme Reconstruction LLC"')
+    p.add_argument("--email", help="their address; without it they cannot recover "
+                                   "their own secret at /recover")
     p.add_argument("--products", help=f"comma-separated ids ({', '.join(PRODUCT_IDS)}); omit for all")
     p.add_argument("--expires", help="YYYY-MM-DD — updates stop after this date; omit for perpetual")
     p.set_defaults(func=cmd_add)
@@ -323,6 +377,11 @@ def main() -> None:
     p.add_argument("--products", help="comma-separated ids, or * for all")
     p.add_argument("--expires", help="YYYY-MM-DD — updates stop after this date; omit for perpetual")
     p.set_defaults(func=cmd_set_products)
+
+    p = sub.add_parser("set-email", help="record a customer's address so they can use /recover")
+    p.add_argument("customer", help="customer name, email, or repository secret")
+    p.add_argument("email", help="the address they bought with")
+    p.set_defaults(func=cmd_set_email)
 
     p = sub.add_parser("show", help="show one customer's repository secret (lost-secret requests)")
     p.add_argument("customer", help="customer name, email, or repository secret")

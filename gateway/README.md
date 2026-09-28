@@ -86,12 +86,24 @@ One-time setup:
 Day-to-day, from the repo root:
 
 ```
-python tools/customer.py add "Acme Reconstruction LLC"
+python tools/customer.py add "Acme Reconstruction LLC" --email buyer@acme.com
 python tools/customer.py add "Smith Engineering" --products recon_toolkit,point_cloud_toolkit
 python tools/customer.py list
+python tools/customer.py set-email "Smith Engineering" ops@smitheng.com
+python tools/customer.py show buyer@acme.com
+python tools/customer.py reissue "Acme Reconstruction LLC"
 python tools/customer.py set-products "Smith Engineering" --products "*"
 python tools/customer.py revoke "Acme Reconstruction LLC"
 ```
+
+Give `add` an `--email` whenever you know it. It is what `/recover`
+matches on, so a customer with an address on file can have their secret
+mailed back to them without writing in; one without it cannot, and `add`
+says so when you leave it off. `set-email` fills in the entries made
+before this existed. `show` looks one customer up — by name, email or the
+secret — without putting every other customer's secret on screen, and
+`reissue` gives them a new secret when the old one may have been seen by
+somebody else rather than merely mislaid.
 
 `add` generates the repository secret, commits the change, and prints the secret once
 along with the customer-facing Blender setup steps. Changes go live on

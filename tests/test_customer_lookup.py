@@ -209,3 +209,159 @@ def test_every_lookup_accepts_an_email(command):
     request that arrives as an email address."""
     block = SOURCE.split(f'sub.add_parser("{command}"', 1)[1].split("p.set_defaults", 1)[0]
     assert "email" in block, f"{command} does not say it accepts an email"
+
+
+# ----------------------------------------------------- recording an address
+
+def added(name, email=None, products=None, expires=None):
+    return types.SimpleNamespace(name=name, email=email, products=products,
+                                 expires=expires)
+
+
+def test_add_records_the_address_it_was_given(cli):
+    # Which is the whole point: /recover finds a customer by the address
+    # they bought with, and finds nothing for one that was never stored.
+    cli.cmd_add(added("Acme LLC", "buyer@acme.com"))
+    entry = list(cli.state["customers"].values())[0]
+    assert entry["email"] == "buyer@acme.com"
+    assert entry["name"] == "Acme LLC"
+
+
+def test_add_keeps_the_address_alongside_a_dated_term(cli):
+    # The two are stored in the same record and neither may displace the
+    # other -- a subscription customer is exactly who writes in later.
+    cli.cmd_add(added("Acme LLC", "buyer@acme.com",
+                      products="recon_toolkit", expires="2027-07-03"))
+    entry = list(cli.state["customers"].values())[0]
+    assert entry["email"] == "buyer@acme.com"
+    assert entry["products"] == {"recon_toolkit": "2027-07-03"}
+
+
+def test_add_without_an_address_stays_the_compact_form(cli):
+    # A name and nothing else is still a plain string; the dict form is for
+    # entries that have something to carry.
+    cli.cmd_add(added("Acme LLC"))
+    assert list(cli.state["customers"].values()) == ["Acme LLC"]
+
+
+def test_add_warns_when_no_address_was_given(cli, capsys):
+    """Otherwise the omission is silent, and surfaces months later as a
+    support request that could have answered itself."""
+    cli.cmd_add(added("Acme LLC"))
+    out = capsys.readouterr().out
+    assert "No email recorded" in out
+    assert "set-email" in out
+
+
+def test_add_does_not_warn_when_it_has_one(cli, capsys):
+    cli.cmd_add(added("Acme LLC", "buyer@acme.com"))
+    assert "No email recorded" not in capsys.readouterr().out
+
+
+def test_a_blank_address_counts_as_none(cli, capsys):
+    cli.cmd_add(added("Acme LLC", "   "))
+    assert list(cli.state["customers"].values()) == ["Acme LLC"]
+    assert "No email recorded" in capsys.readouterr().out
+
+
+def test_surrounding_space_is_trimmed_off_an_address(cli):
+    cli.cmd_add(added("Acme LLC", "  buyer@acme.com  "))
+    entry = list(cli.state["customers"].values())[0]
+    assert entry["email"] == "buyer@acme.com"
+
+
+def test_set_email_fills_in_a_customer_who_had_none(cli):
+    # Every entry made before the gateway could send is in this state.
+    cli.state["customers"] = {"edc_aaa": customer("Acme LLC")}
+    cli.cmd_set_email(types.SimpleNamespace(customer="Acme LLC",
+                                            email="buyer@acme.com"))
+    assert cli.state["customers"]["edc_aaa"]["email"] == "buyer@acme.com"
+
+
+def test_set_email_turns_a_plain_string_entry_into_a_record(cli):
+    # The compact form has nowhere to put an address, so it has to grow one
+    # -- without losing the name it was.
+    cli.state["customers"] = {"edc_aaa": "Acme LLC"}
+    cli.cmd_set_email(types.SimpleNamespace(customer="Acme LLC",
+                                            email="buyer@acme.com"))
+    assert cli.state["customers"]["edc_aaa"] == {"name": "Acme LLC",
+                                                 "email": "buyer@acme.com"}
+
+
+def test_set_email_keeps_the_rest_of_the_record(cli):
+    entry = customer("Acme LLC", products={"recon_toolkit": "2027-07-03"},
+                     stripe_sessions=["cs_test_123"])
+    cli.state["customers"] = {"edc_aaa": entry}
+    cli.cmd_set_email(types.SimpleNamespace(customer="Acme LLC",
+                                            email="buyer@acme.com"))
+    stored = cli.state["customers"]["edc_aaa"]
+    assert stored["products"] == {"recon_toolkit": "2027-07-03"}
+    assert stored["stripe_sessions"] == ["cs_test_123"]
+
+
+def test_set_email_replaces_one_that_has_changed(cli, capsys):
+    # A customer who has moved address is the other reason to run this, and
+    # the reply has to say which address the secret will now go to.
+    cli.state["customers"] = {"edc_aaa": customer("Acme LLC", "old@acme.com")}
+    cli.cmd_set_email(types.SimpleNamespace(customer="Acme LLC",
+                                            email="new@acme.com"))
+    assert cli.state["customers"]["edc_aaa"]["email"] == "new@acme.com"
+    out = capsys.readouterr().out
+    assert "old@acme.com" in out
+    assert "new@acme.com" in out
+
+
+def test_set_email_trims_an_address_pasted_with_space_around_it(cli):
+    # Which is how it arrives: copied out of the email they wrote in with.
+    cli.state["customers"] = {"edc_aaa": customer("Acme LLC")}
+    cli.cmd_set_email(types.SimpleNamespace(customer="Acme LLC",
+                                            email=" buyer@acme.com\n"))
+    assert cli.state["customers"]["edc_aaa"]["email"] == "buyer@acme.com"
+
+
+def test_set_email_refuses_something_that_is_not_an_address(cli):
+    # A typo stored here is worse than no address at all: /recover then has
+    # somewhere to send that nobody reads.
+    cli.state["customers"] = {"edc_aaa": customer("Acme LLC")}
+    with pytest.raises(SystemExit):
+        cli.cmd_set_email(types.SimpleNamespace(customer="Acme LLC",
+                                                email="buyer.acme.com"))
+    assert cli.state["saved"] == []
+    assert "email" not in cli.state["customers"]["edc_aaa"]
+
+
+def test_set_email_is_committed_with_a_readable_message(cli):
+    cli.state["customers"] = {"edc_aaa": customer("Acme LLC")}
+    cli.cmd_set_email(types.SimpleNamespace(customer="Acme LLC",
+                                            email="buyer@acme.com"))
+    assert cli.state["saved"] == ["Set email for Acme LLC: buyer@acme.com"]
+
+
+def test_set_email_leaves_other_customers_alone(cli):
+    cli.state["customers"] = {
+        "edc_bbb": customer("Other Co", "someone@other.com"),
+        "edc_aaa": customer("Acme LLC"),
+    }
+    cli.cmd_set_email(types.SimpleNamespace(customer="Acme LLC",
+                                            email="buyer@acme.com"))
+    assert cli.state["customers"]["edc_bbb"]["email"] == "someone@other.com"
+
+
+def test_a_customer_can_be_found_again_by_the_address_just_set(cli):
+    # The address is only worth storing if it is the thing /recover and
+    # `show` then match on.
+    cli.state["customers"] = {"edc_aaa": "Acme LLC"}
+    cli.cmd_set_email(types.SimpleNamespace(customer="Acme LLC",
+                                            email="buyer@acme.com"))
+    assert cli.find(cli.state["customers"], "buyer@acme.com") == ["edc_aaa"]
+
+
+def test_set_email_is_reachable_and_takes_both_arguments(cli):
+    block = SOURCE.split('sub.add_parser("set-email"', 1)[1].split("p.set_defaults", 1)[0]
+    assert 'p.add_argument("customer"' in block
+    assert 'p.add_argument("email"' in block
+
+
+def test_add_offers_the_address_on_the_command_line(cli):
+    block = SOURCE.split('sub.add_parser("add"', 1)[1].split("p.set_defaults", 1)[0]
+    assert 'p.add_argument("--email"' in block
