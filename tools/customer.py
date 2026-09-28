@@ -49,6 +49,15 @@ ADMIN_TOKEN = os.environ.get("CUSTOMERS_ADMIN_TOKEN", "")
 API_URL = f"https://api.github.com/repos/{REPO}/contents/{PATH}"
 PRODUCT_IDS = ("cammatch", "hve_toolkit", "point_cloud_toolkit", "recon_toolkit")
 
+#: Internal and beta tools. A "*" does not reach these -- the gateway
+#: requires them to be named -- so they are grantable but never implied,
+#: which is how the master account and a named beta tester get one and
+#: nobody else does. Keep in step with RESTRICTED_PRODUCTS in gateway/main.py.
+RESTRICTED_IDS = ("video_forensics_toolkit", "edc_visibility_toolkit",
+                  "recon_calculations", "blendmotion")
+
+GRANTABLE_IDS = PRODUCT_IDS + RESTRICTED_IDS
+
 
 def die(message: str) -> None:
     print(f"error: {message}", file=sys.stderr)
@@ -164,13 +173,19 @@ def find(customers: dict, key: str) -> list[str]:
 
 
 def parse_products(raw: str | None) -> list[str] | None:
-    """None means all products (stored as the compact plain-string form)."""
+    """None means all published products (the compact plain-string form).
+
+    ``*`` may be combined with named products -- ``*,video_forensics_toolkit``
+    -- which is the master account's shape: everything published, plus the
+    internal tools a wildcard deliberately does not reach.
+    """
     if raw is None or raw.strip() in ("", "*"):
         return None
     products = [p.strip() for p in raw.split(",") if p.strip()]
-    unknown = [p for p in products if p not in PRODUCT_IDS]
+    unknown = [p for p in products if p != "*" and p not in GRANTABLE_IDS]
     if unknown:
-        die(f"unknown product id(s) {unknown}; valid: {', '.join(PRODUCT_IDS)} or *")
+        die(f"unknown product id(s) {unknown}; valid: "
+            f"{', '.join(GRANTABLE_IDS)}, or * for the published four")
     return products
 
 
@@ -396,7 +411,10 @@ def main() -> None:
     p.add_argument("name", help='customer label, e.g. "Acme Reconstruction LLC"')
     p.add_argument("--email", help="their address; without it they cannot recover "
                                    "their own secret at /recover")
-    p.add_argument("--products", help=f"comma-separated ids ({', '.join(PRODUCT_IDS)}); omit for all")
+    p.add_argument("--products", help=f"comma-separated ids ({', '.join(PRODUCT_IDS)}); "
+                                      f"omit for all published. Internal tools "
+                                      f"({', '.join(RESTRICTED_IDS)}) must be named "
+                                      f"outright, and can follow a * ")
     p.add_argument("--expires", help="YYYY-MM-DD — updates stop after this date; omit for perpetual")
     p.set_defaults(func=cmd_add)
 

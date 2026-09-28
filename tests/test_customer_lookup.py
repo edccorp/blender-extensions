@@ -436,3 +436,53 @@ def test_an_empty_address_counts_as_missing(cli, capsys):
 
 def test_needs_email_is_reachable(cli):
     assert 'sub.add_parser("needs-email"' in SOURCE
+
+
+# ------------------------------------- granting the internal tools by name
+
+def test_a_restricted_product_can_be_granted():
+    """A "*" deliberately does not reach them, so there has to be a way to
+    name one -- otherwise the master account cannot be given the tools it
+    is the only account meant to have."""
+    cli_src = SOURCE
+    assert "RESTRICTED_IDS" in cli_src
+    for pid in ("video_forensics_toolkit", "edc_visibility_toolkit",
+                "recon_calculations", "blendmotion"):
+        assert pid in cli_src, pid
+
+
+def test_a_wildcard_can_be_combined_with_named_products(cli):
+    # The master account's shape: everything published, plus the internal
+    # tools a wildcard does not cover.
+    assert cli.parse_products("*,video_forensics_toolkit") == [
+        "*", "video_forensics_toolkit"]
+
+
+def test_a_wildcard_on_its_own_is_still_the_compact_form(cli):
+    assert cli.parse_products("*") is None
+    assert cli.parse_products("") is None
+    assert cli.parse_products(None) is None
+
+
+def test_a_published_product_is_still_accepted(cli):
+    assert cli.parse_products("recon_toolkit") == ["recon_toolkit"]
+
+
+def test_an_unknown_product_is_still_refused(cli, capsys):
+    with pytest.raises(SystemExit):
+        cli.parse_products("recon_toolkit,not_a_product")
+    err = capsys.readouterr().err
+    assert "not_a_product" in err
+    # And the message lists what it would have accepted, internal ones too.
+    assert "video_forensics_toolkit" in err
+
+
+def test_the_two_restricted_lists_agree():
+    """The CLI's list and the gateway's are separate files; a product in one
+    and not the other is either ungrantable or silently public."""
+    gateway = (ROOT / "gateway" / "main.py").read_text()
+    restricted = SOURCE.split("RESTRICTED_IDS = (", 1)[1].split(")", 1)[0]
+    for pid in ("video_forensics_toolkit", "edc_visibility_toolkit",
+                "recon_calculations", "blendmotion"):
+        assert pid in restricted, f"{pid} cannot be granted"
+        assert pid in gateway, f"{pid} is not restricted by the gateway"
