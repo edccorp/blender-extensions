@@ -67,6 +67,27 @@ def test_the_page_does_not_promise_the_token_is_shown():
     assert "never shown on the page" in answer
 
 
+LAUNCH = (ROOT / "content" / "assets" / "launch.html").read_text()
+
+
+def test_the_homepage_install_box_links_it_too():
+    """The box is read with Blender open and nothing to paste into Secret,
+    which is the moment a missing token actually stops someone."""
+    install = LAUNCH.split('id="install"', 1)[1].split("</section>", 1)[0]
+    assert BUILD.RECOVER_URL in install
+
+
+def test_the_homepage_link_is_absolute_as_well():
+    # Served from Pages as well as the gateway, same as the built pages.
+    assert 'href="/recover"' not in LAUNCH
+
+
+def test_the_homepage_offers_it_where_the_token_is_pasted():
+    # After the steps, not buried under the older-add-on note below them.
+    install = LAUNCH.split('id="install"', 1)[1].split("</section>", 1)[0]
+    assert install.index(BUILD.RECOVER_URL) < install.index("Already have an older")
+
+
 def test_nothing_in_the_page_is_left_unexpanded():
     # It is one big f-string; a stray {NAME} ships to customers as literal
     # braces rather than a link.
