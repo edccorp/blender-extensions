@@ -45,8 +45,8 @@ def test_the_internal_tools_are_restricted_by_default():
     """Named outright, not merely parametrized over. An empty set would
     restrict nothing and every test that loops over it would pass with no
     cases at all -- which is the bug, wearing a green suite."""
-    for pid in ("video_forensics_toolkit", "edc_visibility_toolkit",
-                "recon_calculations", "blendmotion"):
+    for pid in ("video_forensics_toolkit", "audio_forensics_toolkit",
+                "edc_visibility_toolkit", "recon_calculations", "blendmotion"):
         assert pid in RESTRICTED, pid
 
 

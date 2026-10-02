@@ -52,6 +52,7 @@ PRODUCTS = [
     "edccorp/EDCReconToolkit",
     "edccorp/EDCVisibilityToolkit",
     "edccorp/EDCVideoForensicsToolkit",
+    "edccorp/EDCAudioForensicsToolkit",
     "edccorp/EDC-Recon-Calculations",
     "edccorp/BlendMotion",
 ]
@@ -72,6 +73,7 @@ PRERELEASE_PRODUCTS = {
 # (comma-separated).
 HIDDEN_PRODUCTS = {
     "video_forensics_toolkit",
+    "audio_forensics_toolkit",
     "edc_visibility_toolkit",
     "recon_calculations",
     "blendmotion",
