@@ -54,7 +54,7 @@ PRODUCT_IDS = ("cammatch", "hve_toolkit", "point_cloud_toolkit", "recon_toolkit"
 #: which is how the master account and a named beta tester get one and
 #: nobody else does. Keep in step with RESTRICTED_PRODUCTS in gateway/main.py.
 RESTRICTED_IDS = ("video_forensics_toolkit", "audio_forensics_toolkit",
-                  "edc_visibility_toolkit", "recon_calculations", "blendmotion")
+                  "visibility_toolkit", "recon_calculations", "blendmotion")
 
 GRANTABLE_IDS = PRODUCT_IDS + RESTRICTED_IDS
 

@@ -447,7 +447,7 @@ def test_a_restricted_product_can_be_granted():
     cli_src = SOURCE
     assert "RESTRICTED_IDS" in cli_src
     for pid in ("video_forensics_toolkit", "audio_forensics_toolkit",
-                "edc_visibility_toolkit", "recon_calculations", "blendmotion"):
+                "visibility_toolkit", "recon_calculations", "blendmotion"):
         assert pid in cli_src, pid
 
 
@@ -483,6 +483,6 @@ def test_the_two_restricted_lists_agree():
     gateway = (ROOT / "gateway" / "main.py").read_text()
     restricted = SOURCE.split("RESTRICTED_IDS = (", 1)[1].split(")", 1)[0]
     for pid in ("video_forensics_toolkit", "audio_forensics_toolkit",
-                "edc_visibility_toolkit", "recon_calculations", "blendmotion"):
+                "visibility_toolkit", "recon_calculations", "blendmotion"):
         assert pid in restricted, f"{pid} cannot be granted"
         assert pid in gateway, f"{pid} is not restricted by the gateway"

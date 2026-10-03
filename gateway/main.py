@@ -116,7 +116,7 @@ FREE_PRODUCTS = [
 RESTRICTED_PRODUCTS = frozenset(
     p.strip() for p in os.environ.get(
         "RESTRICTED_PRODUCTS",
-        "video_forensics_toolkit,audio_forensics_toolkit,edc_visibility_toolkit,"
+        "video_forensics_toolkit,audio_forensics_toolkit,visibility_toolkit,"
         "recon_calculations,blendmotion",
     ).split(",") if p.strip()
 )
@@ -235,6 +235,15 @@ def _active(expiry) -> bool:
     return expiry is None or str(expiry) >= date.today().isoformat()
 
 
+#: Other names a grant for a product may have been made under. The
+#: Visibility Toolkit was restricted as "edc_visibility_toolkit", an id no
+#: release ever carried, so grants were written with that name; they keep
+#: working now that the real id is restricted.
+GRANT_ALIASES = {
+    "visibility_toolkit": ("edc_visibility_toolkit",),
+}
+
+
 def _entitlement_keys(product_id: str) -> tuple:
     """Which grants can cover this product.
 
@@ -242,9 +251,10 @@ def _entitlement_keys(product_id: str) -> tuple:
     restricted product: those have to be named, or every customer holding
     a "*" would get an internal tool the moment it entered the index.
     """
+    names = (product_id,) + GRANT_ALIASES.get(product_id, ())
     if product_id in RESTRICTED_PRODUCTS:
-        return (product_id,)
-    return ("*", product_id)
+        return names
+    return ("*",) + names
 
 
 def _entitled(customer: dict, product_id: str) -> bool:
