@@ -116,7 +116,7 @@ FREE_PRODUCTS = [
 RESTRICTED_PRODUCTS = frozenset(
     p.strip() for p in os.environ.get(
         "RESTRICTED_PRODUCTS",
-        "video_forensics_toolkit,visibility_toolkit,"
+        "video_forensics_toolkit,audio_forensics_toolkit,visibility_toolkit,"
         "recon_calculations,blendmotion",
     ).split(",") if p.strip()
 )

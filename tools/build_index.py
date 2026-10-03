@@ -52,6 +52,7 @@ PRODUCTS = [
     "edccorp/EDCReconToolkit",
     "edccorp/EDCVisibilityToolkit",
     "edccorp/EDCVideoForensicsToolkit",
+    "edccorp/EDCAudioForensicsToolkit",
     "edccorp/EDC-Recon-Calculations",
     "edccorp/BlendMotion",
 ]
@@ -77,6 +78,7 @@ PRERELEASE_PRODUCTS = {
 # has shipped as "visibility_toolkit", so it was advertised all along.
 HIDDEN_PRODUCTS = {
     "video_forensics_toolkit",
+    "audio_forensics_toolkit",
     "visibility_toolkit",
     "recon_calculations",
     "blendmotion",
