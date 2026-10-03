@@ -24,7 +24,7 @@ def _entitlement():
         name = getattr(node, "name", None)
         if name is None and isinstance(node, ast.Assign):
             name = getattr(node.targets[0], "id", None)
-        if name in {"RESTRICTED_PRODUCTS", "_entitlement_keys", "_entitled",
+        if name in {"RESTRICTED_PRODUCTS", "GRANT_ALIASES", "_entitlement_keys", "_entitled",
                     "_active", "_entitlement_state"}:
             exec(compile(ast.Module([node], []), "<ast>", "exec"), ns)
     return ns
@@ -45,7 +45,7 @@ def test_the_internal_tools_are_restricted_by_default():
     """Named outright, not merely parametrized over. An empty set would
     restrict nothing and every test that loops over it would pass with no
     cases at all -- which is the bug, wearing a green suite."""
-    for pid in ("video_forensics_toolkit", "edc_visibility_toolkit",
+    for pid in ("video_forensics_toolkit", "visibility_toolkit",
                 "recon_calculations", "blendmotion"):
         assert pid in RESTRICTED, pid
 
@@ -82,7 +82,22 @@ def test_a_named_grant_beside_a_wildcard_works():
 
 def test_a_named_grant_for_one_does_not_open_the_others():
     who = customer(**{"video_forensics_toolkit": None})
-    assert not entitled(who, "edc_visibility_toolkit")
+    assert not entitled(who, "visibility_toolkit")
+
+
+def test_a_grant_under_the_old_visibility_id_still_covers_it():
+    """Grants were written as "edc_visibility_toolkit" while that was the
+    restricted name; the master account should not lose the tool when the
+    real id takes its place."""
+    who = customer(**{"*": None, "edc_visibility_toolkit": None})
+    assert entitled(who, "visibility_toolkit")
+    assert not entitled(customer(**{"*": None}), "visibility_toolkit")
+
+
+def test_the_restricted_ids_are_the_ones_the_releases_ship():
+    """An id that matches no manifest restricts and hides nothing."""
+    assert "edc_visibility_toolkit" not in RESTRICTED
+    assert '"edc_visibility_toolkit"' not in BUILD.split("HIDDEN_PRODUCTS = {", 1)[1].split("}", 1)[0]
 
 
 def test_an_expired_named_grant_does_not_still_let_them_in():

@@ -70,9 +70,14 @@ PRERELEASE_PRODUCTS = {
 # in Blender; they're just not advertised (internal/beta tools). Add ids to the
 # literal set, or override at build time via the HIDDEN_PRODUCTS env var
 # (comma-separated).
+#
+# The id has to be the one in the released zip, not the repository's name:
+# an id that matches nothing hides nothing. The Visibility Toolkit was
+# listed here as "edc_visibility_toolkit" while every release since v1.16.0
+# has shipped as "visibility_toolkit", so it was advertised all along.
 HIDDEN_PRODUCTS = {
     "video_forensics_toolkit",
-    "edc_visibility_toolkit",
+    "visibility_toolkit",
     "recon_calculations",
     "blendmotion",
 } | set(filter(None, (os.environ.get("HIDDEN_PRODUCTS") or "").replace(" ", "").split(",")))
