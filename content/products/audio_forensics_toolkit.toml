@@ -1,0 +1,55 @@
+# Product page content for the Audio Forensics Toolkit™.
+#
+# Inert until the product launches: its id is in HIDDEN_PRODUCTS in
+# tools/build_index.py, and the build skips the product page for hidden
+# products. Remove it from that set and this page starts rendering on the
+# next publish run.
+#
+# No price, hero image, gallery or sample report yet — add them before
+# launch. The renderer omits each of those sections when its key is absent,
+# so the page is coherent without them.
+
+name = "Audio Forensics Toolkit™"
+tagline = "Measure What the Recording Heard"
+badge = "Built for Blender • Powered by FFmpeg"
+blender_min = "4.2"
+
+pitch = """The Audio Forensics Toolkit™ examines recorded audio inside \
+Blender's Video Sequencer, on the same timeline as the video from the same \
+incident. It shows what is in a recording, tests whether it is continuous \
+and original, times the events in it to the millisecond, lines it up with \
+other recordings, and measures a vehicle's speed from the sound of its own \
+tires — every result in file time, with the evidence behind it."""
+
+features = [
+    "Calibrated (dBFS) spectrogram, drawn over its strip on the timeline, and a live spectrum at the playhead",
+    "Metadata, Broadcast-WAV bext fields, editing-software flags, SHA-256 of the file and of the decoded audio",
+    "ENF (mains hum) extraction with drift-tolerant step detection",
+    "Encoding history from the bandwidth cutoff; clipping, dropouts and splice candidates",
+    "Acoustic event times to about a millisecond, as timeline markers",
+    "Recording sync by cross-correlation; audio/video offset from a sync event",
+    "Vehicle speed from tire tread frequency (Vega et al., SAE 2025-01-8682 and 2026-01-0536), axle spacing and Doppler",
+    "Validation against a VBOX GPS log, and a cross-check with the Video Forensics Toolkit's speed",
+    "Full and batch reports as CSV and text",
+]
+
+requirements = [
+    "Blender 4.2 or newer",
+    "FFmpeg (ffmpeg and ffprobe) on the system PATH — reads any audio or video file; PCM WAV works without it",
+    "Optional: matplotlib, for labelled exhibits; installs from the add-on preferences",
+]
+
+[[sections]]
+title = "Speed from the sound of the tires"
+body = """Each tread block striking the road is an impulse, so a rolling \
+tire emits a tone whose frequency follows the vehicle's speed. The toolkit \
+follows that line through the spectrogram automatically and converts it with \
+the published equation, reporting every speed with the range its line width \
+supports and the published validation beside it."""
+
+[[sections]]
+title = "Built for professionals"
+body = """The Audio Forensics Toolkit™ is designed for accident \
+reconstruction engineers, forensic engineers, engineering consultants, \
+government agencies, law enforcement, universities, and researchers working \
+with recorded audio."""

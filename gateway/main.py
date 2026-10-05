@@ -61,7 +61,7 @@ import json
 import os
 import secrets
 import time
-from datetime import date, timedelta
+from datetime import date, datetime, timedelta, timezone
 
 import httpx
 from fastapi import FastAPI, HTTPException, Request
@@ -116,7 +116,7 @@ FREE_PRODUCTS = [
 RESTRICTED_PRODUCTS = frozenset(
     p.strip() for p in os.environ.get(
         "RESTRICTED_PRODUCTS",
-        "video_forensics_toolkit,edc_visibility_toolkit,"
+        "video_forensics_toolkit,audio_forensics_toolkit,visibility_toolkit,"
         "recon_calculations,blendmotion",
     ).split(",") if p.strip()
 )
@@ -235,6 +235,15 @@ def _active(expiry) -> bool:
     return expiry is None or str(expiry) >= date.today().isoformat()
 
 
+#: Other names a grant for a product may have been made under. The
+#: Visibility Toolkit was restricted as "edc_visibility_toolkit", an id no
+#: release ever carried, so grants were written with that name; they keep
+#: working now that the real id is restricted.
+GRANT_ALIASES = {
+    "visibility_toolkit": ("edc_visibility_toolkit",),
+}
+
+
 def _entitlement_keys(product_id: str) -> tuple:
     """Which grants can cover this product.
 
@@ -242,9 +251,10 @@ def _entitlement_keys(product_id: str) -> tuple:
     restricted product: those have to be named, or every customer holding
     a "*" would get an internal tool the moment it entered the index.
     """
+    names = (product_id,) + GRANT_ALIASES.get(product_id, ())
     if product_id in RESTRICTED_PRODUCTS:
-        return (product_id,)
-    return ("*", product_id)
+        return names
+    return ("*",) + names
 
 
 def _entitled(customer: dict, product_id: str) -> bool:
@@ -1363,6 +1373,99 @@ async def index_json(request: Request):
     return Response(content=body, media_type="application/json")
 
 
+
+# --- who has which version --------------------------------------------------
+#
+# GitHub's release download_count is not an answer: on a private repo it
+# counts authenticated fetches of every kind, and it carries no identity at
+# all. The gateway is the only place that knows who asked, and it was saying
+# so to stdout, where the answer lives as long as the log retention and is
+# not queryable even then.
+#
+# So the stamp goes on the customer, in the file that is already the record
+# of who may have what. Not on every download, though: that file's git
+# history is the entitlement audit trail, and a commit per download would
+# bury the commits that matter under the ones that do not. Pending stamps
+# are coalesced in memory -- many downloads by one customer collapse to one
+# field -- and written at most once every DOWNLOAD_FLUSH_SECONDS, after the
+# response, so a download never waits on a commit and never fails because
+# one failed.
+
+#: Seconds between writes. A download is not urgent news; losing the last
+#: few minutes of them to a restart costs less than a commit per download.
+DOWNLOAD_FLUSH_SECONDS = float(os.environ.get("DOWNLOAD_FLUSH_SECONDS", "600"))
+
+#: Stamps seen but not yet written, keyed by customer *name* rather than by
+#: repository secret. This dict outlives the request that filled it, and a
+#: secret sitting in it would be one more place a secret lives for no reason.
+_PENDING_DOWNLOADS: dict = {}
+_DOWNLOADS_WRITTEN_AT = 0.0
+
+
+def _record_download(name: str, filename: str) -> None:
+    """Note that this customer fetched this file, for the next flush."""
+    _PENDING_DOWNLOADS[name] = {
+        "file": filename,
+        "at": datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
+    }
+
+
+def _stamp_customers(customers: dict, pending: dict) -> bool:
+    """Write the stamps into the customer map. True if anything changed.
+
+    A plain-string entry is upgraded to the object form to carry the stamp.
+    That is safe and not merely convenient: a string means every product
+    forever, and an object with no products key normalises to exactly the
+    same thing, so the upgrade cannot quietly narrow what someone may
+    install.
+    """
+    changed = False
+    for token, raw in list(customers.items()):
+        name = raw.get("name") if isinstance(raw, dict) else raw
+        stamp = pending.get(name) if isinstance(name, str) else None
+        if stamp is None:
+            continue
+        if isinstance(raw, str):
+            raw = {"name": raw}
+            customers[token] = raw
+            changed = True
+        if raw.get("last_download") != stamp:
+            raw["last_download"] = stamp
+            changed = True
+    return changed
+
+
+async def _flush_downloads(force: bool = False) -> None:
+    """Write pending stamps, if it is time and there is anywhere to write.
+
+    Every failure here is swallowed deliberately. The customer has their
+    file; a gateway that returned an error because it could not record the
+    fact would be trading the thing that matters for the note about it. The
+    stamps stay pending and the next download tries again.
+    """
+    global _DOWNLOADS_WRITTEN_AT
+    if not _PENDING_DOWNLOADS or not CUSTOMERS_REPO or not ADMIN_GH_TOKEN:
+        return
+    now = time.monotonic()
+    if not force and now - _DOWNLOADS_WRITTEN_AT < DOWNLOAD_FLUSH_SECONDS:
+        return
+    _DOWNLOADS_WRITTEN_AT = now
+
+    pending = dict(_PENDING_DOWNLOADS)
+    try:
+        customers, sha = await _read_customers_file()
+        if _stamp_customers(customers, pending):
+            await _write_customers_file(
+                customers, sha,
+                f"Record last download for {len(pending)} customer(s)")
+    except Exception as exc:  # noqa: BLE001
+        print(f"[gateway] last_download not written ({exc}); still pending")
+        return
+    for name, stamp in pending.items():
+        if _PENDING_DOWNLOADS.get(name) == stamp:
+            _PENDING_DOWNLOADS.pop(name, None)
+
+
 @app.get("/packages/{filename}")
 async def package(filename: str, request: Request):
     customer = await _require_customer(request)
@@ -1403,10 +1506,14 @@ async def package(filename: str, request: Request):
         raise HTTPException(status_code=502, detail=f"upstream returned {upstream.status_code}")
 
     print(f"[gateway] {filename} download by {customer['name']}")
+    _record_download(customer["name"], filename)
 
     async def _close():
         await upstream.aclose()
         await client.aclose()
+        # After the bytes, never before: the stamp is a note about the
+        # download and must not be able to delay or fail it.
+        await _flush_downloads()
 
     return StreamingResponse(
         upstream.aiter_bytes(),
