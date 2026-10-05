@@ -33,11 +33,14 @@ Blender notifies you when updates are available.
   (the manifest is the source of truth for id/name/version), and writes
   `index.json` in Blender's remote-repository format plus an `index.html`
   landing page.
-- The add-on zips are **mirrored into the published site**
-  (`packages/*.zip`), so customers can install and update even while the
-  product repos are private. Set `MIRROR_ZIPS=0` in the workflow to point
-  at the GitHub release assets directly instead (only works once the
-  product repos are public).
+- The add-on zips are **not** published on the public site. The workflow
+  runs with `MIRROR_ZIPS=0` (gateway mode): `index.json` points at
+  `/packages/*.zip` URLs, and the Railway gateway at
+  `extensions.edccorp.com` serves those URLs to authenticated customers by
+  streaming the private GitHub release assets (see
+  [`gateway/README.md`](gateway/README.md)). Setting `MIRROR_ZIPS=1`
+  instead copies the zips onto the public Pages site, which makes them
+  downloadable by anyone.
 - **Required setup while the product repos are private:** add a
   `PRODUCTS_TOKEN` repository secret (a fine-grained personal access
   token with **Contents: read** on every product repo, hidden ones

@@ -91,6 +91,8 @@ python tools/customer.py add "Smith Engineering" --products recon_toolkit,point_
 python tools/customer.py list
 python tools/customer.py needs-email
 python tools/customer.py set-email "Smith Engineering" ops@smitheng.com
+python tools/customer.py add-email "Acme Reconstruction LLC" it@acme.com cad@acme.com
+python tools/customer.py remove-email "Acme Reconstruction LLC" cad@acme.com
 python tools/customer.py show buyer@acme.com
 python tools/customer.py reissue "Acme Reconstruction LLC"
 python tools/customer.py set-products "Smith Engineering" --products "*"
@@ -110,6 +112,24 @@ before this existed. `show` looks one customer up — by name, email or the
 secret — without putting every other customer's secret on screen, and
 `reissue` gives them a new secret when the old one may have been seen by
 somebody else rather than merely mislaid.
+
+**Several addresses on one secret (company licenses).** `add-email` gives
+a customer more addresses; they are stored beside the main one:
+
+```json
+{"edc_...": {"name": "Acme LLC (company license)", "email": "it@acme.com",
+             "emails": ["cad@acme.com", "boss@acme.com"],
+             "products": {"recon_toolkit": "2027-10-05"}}}
+```
+
+Any of them can recover the secret at `/recover` (it is mailed to the
+address that asked), a Stripe purchase made with any of them is added to
+this secret rather than creating a new one, and `show` finds the customer
+by any of them. `email` stays the main address -- new-purchase emails go
+there -- and `remove-email` on it promotes the next one. An address can be
+on only one customer; `add-email` refuses one that is already elsewhere.
+Keep `email` a single string when editing by hand: extra addresses go in
+the `emails` list.
 
 `add` generates the repository secret, commits the change, and prints the secret once
 along with the customer-facing Blender setup steps. Changes go live on
