@@ -274,7 +274,8 @@ def test_recovery_sends_to_the_address_on_file_not_the_one_typed():
     the rightful owner asks, and typing somebody else's only mails that
     person."""
     body = recover_body()
-    assert 'await mail.send(\n            value["email"]' in body, \
+    assert "address = _email_on_file(value, wanted)" in body
+    assert 'await mail.send(\n            address,' in body, \
         "the recovery email is addressed from the form, not from the record"
 
 

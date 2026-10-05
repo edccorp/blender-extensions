@@ -20,6 +20,8 @@ Usage:
     python tools/customer.py list
     python tools/customer.py needs-email
     python tools/customer.py set-email "Acme Reconstruction LLC" buyer@acme.com
+    python tools/customer.py add-email "Acme Reconstruction LLC" it@acme.com cad@acme.com
+    python tools/customer.py remove-email "Acme Reconstruction LLC" cad@acme.com
     python tools/customer.py show buyer@acme.com
     python tools/customer.py reissue "Acme Reconstruction LLC"
     python tools/customer.py set-products "Smith Engineering" --products "*"
@@ -145,6 +147,26 @@ def email_of(value) -> str:
     return "" if isinstance(value, str) else (value.get("email") or "")
 
 
+def emails_of(value) -> list[str]:
+    """Every address on an entry: "email" first, then any in "emails".
+
+    A company license can carry several, so more than one person there can
+    recover the secret and renew onto it. Same rule as _entry_emails in
+    gateway/main.py -- keep the two in step.
+    """
+    if isinstance(value, str):
+        return []
+    extra = value.get("emails")
+    candidates = [value.get("email"), *(extra if isinstance(extra, list) else [])]
+    seen, found = set(), []
+    for address in candidates:
+        if isinstance(address, str) and address.strip():
+            if address.strip().lower() not in seen:
+                seen.add(address.strip().lower())
+                found.append(address.strip())
+    return found
+
+
 def products_of(value) -> list[str]:
     """Display form: 'recon_toolkit (through 2027-07-03)' for dated terms."""
     if isinstance(value, str):
@@ -169,7 +191,8 @@ def find(customers: dict, key: str) -> list[str]:
     by_name = [t for t, v in customers.items() if name_of(v).lower() == wanted]
     if by_name:
         return by_name
-    return [t for t, v in customers.items() if email_of(v).lower() == wanted]
+    return [t for t, v in customers.items()
+            if wanted in (a.lower() for a in emails_of(v))]
 
 
 def parse_products(raw: str | None) -> list[str] | None:
@@ -306,8 +329,8 @@ def cmd_show(args) -> None:
     token = resolve_one(customers, args.customer)
     value = customers[token]
     print(f"{name_of(value)}")
-    if email_of(value):
-        print(f"  email:    {email_of(value)}")
+    for n, address in enumerate(emails_of(value)):
+        print(f"  {'email:' if n == 0 else '':<9} {address}")
     print(f"  products: {', '.join(products_of(value))}")
     print(setup_lines(token))
 
@@ -326,7 +349,7 @@ def cmd_needs_email(args) -> None:
     what `show` exists to avoid.
     """
     customers, _ = fetch()
-    missing = sorted((name_of(v) for v in customers.values() if not email_of(v)),
+    missing = sorted((name_of(v) for v in customers.values() if not emails_of(v)),
                      key=str.lower)
     if not customers:
         print("no customers yet")
@@ -363,12 +386,93 @@ def cmd_set_email(args) -> None:
         customers[token] = value
     previous = value.get("email", "")
     value["email"] = email
+    _drop_extra(value, email)   # it is the main address now, not an extra
     save(customers, sha, f"Set email for {name_of(value)}: {email}")
     if previous and previous.lower() != email.lower():
         print(f"Replaced {previous} with {email} for {name_of(value)}.")
     else:
         print(f"{name_of(value)} can now recover their own secret at "
               f"/recover using {email}.")
+
+
+def _drop_extra(value: dict, address: str) -> None:
+    """Remove `address` from an entry's extra "emails", and the key if empty."""
+    extra = [a for a in value.get("emails") or []
+             if not (isinstance(a, str) and a.strip().lower() == address.lower())]
+    if extra:
+        value["emails"] = extra
+    else:
+        value.pop("emails", None)
+
+
+def cmd_add_email(args) -> None:
+    """Give a customer another address, e.g. a company license several
+    people at the firm should be able to recover and renew.
+
+    Any address on the entry works at /recover, and a Stripe purchase made
+    with any of them is added onto this secret rather than minting another.
+    That is also why one address may belong to only one customer: a
+    purchase or a recovery must never have two entries to choose between.
+    """
+    customers, sha = fetch()
+    token = resolve_one(customers, args.customer)
+    value = customers[token]
+    if isinstance(value, str):
+        value = {"name": value}
+        customers[token] = value
+    added = []
+    for raw in args.emails:
+        email = raw.strip()
+        if "@" not in email:
+            die(f"{email!r} is not an email address")
+        others = [name_of(v) for t, v in customers.items()
+                  if t != token and email.lower() in (a.lower() for a in emails_of(v))]
+        if others:
+            die(f"{email} is already on {others[0]}; one address can belong "
+                "to one customer only. Remove it there first with remove-email.")
+        if email.lower() in (a.lower() for a in emails_of(value)):
+            print(f"{email} is already on {name_of(value)}.")
+            continue
+        if not value.get("email"):
+            value["email"] = email
+        else:
+            value["emails"] = [*(value.get("emails") or []), email]
+        added.append(email)
+    if not added:
+        return
+    save(customers, sha, f"Add email for {name_of(value)}: {', '.join(added)}")
+    print(f"{name_of(value)} now has: {', '.join(emails_of(value))}")
+    print("Any of them can recover the secret at /recover, and a purchase "
+          "with any of them is added to this repository access.")
+
+
+def cmd_remove_email(args) -> None:
+    """Take an address off a customer -- someone who has left the firm.
+
+    Removing the main address promotes the next one, so purchase emails
+    still have somewhere to go.
+    """
+    customers, sha = fetch()
+    token = resolve_one(customers, args.customer)
+    value = customers[token]
+    email = args.email.strip()
+    if email.lower() not in (a.lower() for a in emails_of(value)):
+        die(f"{email} is not on {name_of(value)}")
+    _drop_extra(value, email)
+    if (value.get("email") or "").strip().lower() == email.lower():
+        rest = emails_of({**value, "email": None})
+        if rest:
+            value["email"] = rest[0]
+            _drop_extra(value, rest[0])
+        else:
+            value.pop("email", None)
+    save(customers, sha, f"Remove email for {name_of(value)}: {email}")
+    left = emails_of(value)
+    if left:
+        print(f"Removed {email}. {name_of(value)} now has: {', '.join(left)}")
+    else:
+        print(f"Removed {email}. {name_of(value)} has no address left and "
+              "cannot recover their own secret.")
 
 
 def cmd_reissue(args) -> None:
@@ -434,6 +538,16 @@ def main() -> None:
     p.add_argument("customer", help="customer name, email, or repository secret")
     p.add_argument("email", help="the address they bought with")
     p.set_defaults(func=cmd_set_email)
+
+    p = sub.add_parser("add-email", help="give a customer another address (company licenses)")
+    p.add_argument("customer", help="customer name, email, or repository secret")
+    p.add_argument("emails", nargs="+", metavar="email", help="one or more addresses to add")
+    p.set_defaults(func=cmd_add_email)
+
+    p = sub.add_parser("remove-email", help="take an address off a customer")
+    p.add_argument("customer", help="customer name, email, or repository secret")
+    p.add_argument("email", help="the address to remove")
+    p.set_defaults(func=cmd_remove_email)
 
     p = sub.add_parser("show", help="show one customer's repository secret (lost-secret requests)")
     p.add_argument("customer", help="customer name, email, or repository secret")

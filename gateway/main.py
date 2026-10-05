@@ -551,6 +551,38 @@ def _session_term_days(session: dict) -> int | None:
     return days
 
 
+def _entry_emails(value) -> list[str]:
+    """Every address on an entry: "email" first, then any in "emails".
+
+    "email" stays the one address an entry is written with and the one a
+    purchase is mailed to; "emails" holds the others, for a company
+    license several people should be able to recover and renew. Kept as a
+    separate key so a gateway that predates it reads such an entry exactly
+    as before. Anything that is not a non-empty string is ignored rather
+    than trusted -- this file is edited by hand.
+    """
+    if not isinstance(value, dict):
+        return []          # the compact form carries no address
+    extra = value.get("emails")
+    candidates = [value.get("email"), *(extra if isinstance(extra, list) else [])]
+    seen, found = set(), []
+    for address in candidates:
+        if isinstance(address, str) and address.strip():
+            if address.strip().lower() not in seen:
+                seen.add(address.strip().lower())
+                found.append(address.strip())
+    return found
+
+
+def _email_on_file(value, wanted: str) -> str | None:
+    """The address on this entry that matches `wanted`, as recorded, or None."""
+    wanted = wanted.strip().lower()
+    for address in _entry_emails(value):
+        if address.lower() == wanted:
+            return address
+    return None
+
+
 def _entry_sessions(value: dict) -> list:
     sessions = value.get("stripe_sessions")
     if isinstance(sessions, list):
@@ -641,10 +673,7 @@ async def _provision_purchase(session: dict) -> dict:
         try:
             if email:
                 for token, value in customers.items():
-                    if (
-                        isinstance(value, dict)
-                        and value.get("email", "").strip().lower() == email.lower()
-                    ):
+                    if isinstance(value, dict) and _email_on_file(value, email):
                         value["products"] = _merge_products(
                             _entitlements(value)["products"], ids, term_days
                         )
@@ -1179,11 +1208,12 @@ async def recover(email: str = ""):
     for token, value in customers.items():
         if not isinstance(value, dict):
             continue        # the compact form carries no address to send to
-        if value.get("email", "").strip().lower() != wanted:
+        address = _email_on_file(value, wanted)
+        if address is None:
             continue
         _RECOVERY_SENT[wanted] = now
         sent = await mail.send(
-            value["email"],
+            address,
             "Your EDC Software repository secret",
             mail.recovery_body(value.get("name", "there"), token),
         )
@@ -1214,7 +1244,7 @@ async def register(request: Request):
 
     customers, sha = await _read_customers_file()
     for token, value in customers.items():
-        if isinstance(value, dict) and value.get("email", "").strip().lower() == email.lower():
+        if isinstance(value, dict) and _email_on_file(value, email):
             # Existing customer: free products are already included with their repository secret.
             # Never re-display a repository secret to someone who only proved they can
             # type an email address.
