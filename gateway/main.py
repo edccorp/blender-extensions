@@ -1204,24 +1204,31 @@ async def recover(email: str = ""):
         # holding the button down learns nothing and the mailbox is spared.
         return HTMLResponse(same_answer)
 
+    # Every customer with this address, not just the first: an address on
+    # two entries would otherwise only ever recover whichever secret sorts
+    # first in the file, and the other could not be recovered at all.
     customers, _sha = await _read_customers_file()
+    matches = []
     for token, value in customers.items():
         if not isinstance(value, dict):
             continue        # the compact form carries no address to send to
         address = _email_on_file(value, wanted)
-        if address is None:
-            continue
-        _RECOVERY_SENT[wanted] = now
-        sent = await mail.send(
-            address,
-            "Your EDC Software repository secret",
-            mail.recovery_body(value.get("name", "there"), token),
-        )
-        print(f"[gateway] recover: secret to <{wanted}>: "
-              f"{'sent' if sent else 'NOT SENT'}")
-        break
-    else:
+        if address is not None:
+            matches.append((address, value.get("name", "there"), token))
+
+    if not matches:
         print(f"[gateway] recover: no customer for <{wanted}>")
+        return HTMLResponse(same_answer)
+
+    _RECOVERY_SENT[wanted] = now
+    address = matches[0][0]
+    if len(matches) == 1:
+        body = mail.recovery_body(matches[0][1], matches[0][2])
+    else:
+        body = mail.recovery_body_several([(name, token) for _a, name, token in matches])
+    sent = await mail.send(address, "Your EDC Software repository secret", body)
+    print(f"[gateway] recover: {len(matches)} secret(s) to <{wanted}>: "
+          f"{'sent' if sent else 'NOT SENT'}")
     return HTMLResponse(same_answer)
 
 
