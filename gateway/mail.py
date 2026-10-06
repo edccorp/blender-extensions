@@ -149,3 +149,26 @@ def recovery_body(name, token):
         "works - but tell us, and we will issue you a new one.\n\n"
         f"-- {CONTACT}\n"
     )
+
+
+def recovery_body_several(entries):
+    """The recovery email when one address is on more than one customer.
+
+    `entries` is [(name, token), ...]. Every secret goes, each under the
+    name it belongs to: sending only the first would leave the others
+    unrecoverable by this address, and which one came first is down to how
+    the customer file happens to sort.
+    """
+    listed = "\n".join(f"  {name}:\n\n    {token}\n" for name, token in entries)
+    return (
+        "Hello,\n\n"
+        "Someone asked us to send the EDC Software repository secret for\n"
+        f"this address. It is on {len(entries)} accounts, so here is each one:\n\n"
+        f"{listed}\n"
+        "Use the one for the products you want in Blender - Blender holds\n"
+        "one secret per repository.\n\n"
+        f"{setup_steps()}\n"
+        "If this was not you, nothing has changed and these secrets still\n"
+        "work - but tell us, and we will issue new ones.\n\n"
+        f"-- {CONTACT}\n"
+    )

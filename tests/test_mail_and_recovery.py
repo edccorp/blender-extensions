@@ -275,7 +275,9 @@ def test_recovery_sends_to_the_address_on_file_not_the_one_typed():
     person."""
     body = recover_body()
     assert "address = _email_on_file(value, wanted)" in body
-    assert 'await mail.send(\n            address,' in body, \
+    assert "matches.append((address," in body
+    assert "address = matches[0][0]" in body
+    assert "await mail.send(address," in body, \
         "the recovery email is addressed from the form, not from the record"
 
 
@@ -381,3 +383,85 @@ def test_unconfigured_mail_does_not_make_the_gateway_unhealthy():
     demotions = [l.strip() for l in body.splitlines() if 'body["ok"] = False' in l]
     assert len(demotions) == 1
     assert "_customers_cache" in body.split(demotions[0], 1)[0].rsplit("if ", 1)[-1]
+
+
+# ------------------------------------- one address on more than one customer
+
+def run_recover(monkeypatch, customers, typed):
+    """The real /recover route, with the customer file and the mail stubbed.
+
+    Returns the one message sent (or None) so the test can read what went
+    where, not merely that the source mentions it.
+    """
+    import ast as _ast
+    mail = load_mail(monkeypatch, **CONFIGURED)
+    outbox = []
+
+    async def send(to, subject, body):
+        outbox.append({"to": to, "subject": subject, "body": body})
+        return True
+    monkeypatch.setattr(mail, "send", send)
+
+    async def read_customers_file():
+        return customers, "sha"
+
+    ns = {
+        "mail": mail, "time": __import__("time"),
+        "HTMLResponse": lambda page: page,
+        "_recovery_page": lambda text, sent=False: text,
+        "_read_customers_file": read_customers_file,
+        "RECOVERY_INTERVAL": 900, "_RECOVERY_SENT": {},
+    }
+    for node in _ast.parse(GATEWAY).body:
+        if getattr(node, "name", None) in {"recover", "_entry_emails", "_email_on_file"}:
+            node.decorator_list = []
+            exec(compile(_ast.Module([node], []), "<ast>", "exec"), ns)
+    page = asyncio.run(ns["recover"](typed))
+    assert len(outbox) <= 1, "more than one email for one request"
+    return page, (outbox[0] if outbox else None)
+
+
+def test_one_customer_gets_the_usual_email(monkeypatch):
+    page, sent = run_recover(monkeypatch, {
+        "edc_one": {"name": "Acme LLC", "email": "it@acme.com"},
+    }, "IT@acme.com")
+    assert sent["to"] == "it@acme.com"
+    assert "edc_one" in sent["body"]
+    assert "Hello Acme LLC" in sent["body"]
+
+
+def test_an_address_on_two_customers_recovers_both_secrets(monkeypatch):
+    """Before, only whichever entry sorted first was sent; the other secret
+    could never be recovered with this address."""
+    page, sent = run_recover(monkeypatch, {
+        "edc_aaa": {"name": "Jo Smith", "email": "jo@acme.com"},
+        "edc_zzz": {"name": "Acme LLC (company license)", "email": "it@acme.com",
+                    "emails": ["jo@acme.com"]},
+        "edc_other": {"name": "Someone Else", "email": "x@y.com"},
+    }, "jo@acme.com")
+    assert sent["to"] == "jo@acme.com"
+    body = sent["body"]
+    assert "edc_aaa" in body and "edc_zzz" in body
+    assert "Jo Smith" in body and "Acme LLC (company license)" in body
+    assert "edc_other" not in body, "a secret went to an address not on its entry"
+    assert "not you" in body
+
+
+def test_the_page_says_the_same_thing_however_many_matched(monkeypatch):
+    one, _ = run_recover(monkeypatch, {"edc_a": {"name": "A", "email": "a@b.com"}},
+                         "a@b.com")
+    two, _ = run_recover(monkeypatch, {"edc_a": {"name": "A", "email": "a@b.com"},
+                                       "edc_b": {"name": "B", "email": "a@b.com"}},
+                         "a@b.com")
+    none, sent = run_recover(monkeypatch, {"edc_a": {"name": "A", "email": "a@b.com"}},
+                             "who@b.com")
+    assert one == two == none
+    assert sent is None
+
+
+def test_the_several_secrets_email_names_each_one(monkeypatch):
+    mail = load_mail(monkeypatch, **CONFIGURED)
+    body = mail.recovery_body_several([("Jo Smith", "edc_1"), ("Acme LLC", "edc_2")])
+    assert body.index("Jo Smith") < body.index("edc_1") < body.index("Acme LLC") < body.index("edc_2")
+    assert "2 accounts" in body
+    assert "https://extensions.edccorp.com/index.json" in body
