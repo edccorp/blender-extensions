@@ -332,7 +332,30 @@ def cmd_show(args) -> None:
     for n, address in enumerate(emails_of(value)):
         print(f"  {'email:' if n == 0 else '':<9} {address}")
     print(f"  products: {', '.join(products_of(value))}")
+    for line in downloads_of(value):
+        print(line)
     print(setup_lines(token))
+
+
+def downloads_of(value) -> list[str]:
+    """Display lines for what the gateway recorded them downloading.
+
+    One line per product from "last_downloads"; entries stamped before that
+    existed have only the single "last_download", which is shown instead.
+    """
+    if not isinstance(value, dict):
+        return []
+    per_product = value.get("last_downloads")
+    if isinstance(per_product, dict) and per_product:
+        rows = sorted(per_product.items(),
+                      key=lambda kv: str((kv[1] or {}).get("at", "")), reverse=True)
+        return [f"  {'downloads:' if n == 0 else '':<9} {pid}: "
+                f"{(d or {}).get('file', '?')} at {(d or {}).get('at', '?')}"
+                for n, (pid, d) in enumerate(rows)]
+    last = value.get("last_download")
+    if isinstance(last, dict):
+        return [f"  last download: {last.get('file', '?')} at {last.get('at', '?')}"]
+    return []
 
 
 def cmd_needs_email(args) -> None:

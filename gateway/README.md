@@ -113,6 +113,13 @@ secret — without putting every other customer's secret on screen, and
 `reissue` gives them a new secret when the old one may have been seen by
 somebody else rather than merely mislaid.
 
+**What each customer downloaded.** The gateway records downloads on the
+customer's entry: `last_downloads` holds the latest file and time for each
+product, and `last_download` the latest of anything. They are written at
+most every `DOWNLOAD_FLUSH_SECONDS` (default 600), so downloads in the last
+few minutes before a restart can be lost. `show` lists them per product,
+newest first.
+
 **Several addresses on one secret (company licenses).** `add-email` gives
 a customer more addresses; they are stored beside the main one:
 
