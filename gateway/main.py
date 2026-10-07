@@ -1439,12 +1439,23 @@ _PENDING_DOWNLOADS: dict = {}
 _DOWNLOADS_WRITTEN_AT = 0.0
 
 
-def _record_download(name: str, filename: str) -> None:
-    """Note that this customer fetched this file, for the next flush."""
-    _PENDING_DOWNLOADS[name] = {
-        "file": filename,
-        "at": datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
-    }
+def _record_download(name: str, filename: str, product_id: str = "") -> None:
+    """Note that this customer fetched this file, for the next flush.
+
+    "file"/"at" are the latest download of anything; "products" keeps the
+    latest per product, so installing three toolkits inside one flush
+    window records all three rather than whichever came last.
+
+    A new dict every time, never an update in place: the flush compares
+    what it wrote against what is pending by value, and a nested dict
+    mutated under it would compare equal and be dropped unwritten.
+    """
+    stamp = {"file": filename,
+             "at": datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")}
+    products = dict((_PENDING_DOWNLOADS.get(name) or {}).get("products") or {})
+    if product_id:
+        products[product_id] = dict(stamp)
+    _PENDING_DOWNLOADS[name] = {**stamp, "products": products}
 
 
 def _stamp_customers(customers: dict, pending: dict) -> bool:
@@ -1466,9 +1477,20 @@ def _stamp_customers(customers: dict, pending: dict) -> bool:
             raw = {"name": raw}
             customers[token] = raw
             changed = True
-        if raw.get("last_download") != stamp:
-            raw["last_download"] = stamp
+        latest = {"file": stamp["file"], "at": stamp["at"]}
+        if raw.get("last_download") != latest:
+            raw["last_download"] = latest
             changed = True
+        # One entry per product, so a customer's other toolkits are not
+        # forgotten each time they download a different one.
+        per_product = stamp.get("products") or {}
+        if per_product:
+            existing = raw.get("last_downloads")
+            merged = dict(existing) if isinstance(existing, dict) else {}
+            merged.update(per_product)
+            if merged != existing:
+                raw["last_downloads"] = merged
+                changed = True
     return changed
 
 
@@ -1543,7 +1565,7 @@ async def package(filename: str, request: Request):
         raise HTTPException(status_code=502, detail=f"upstream returned {upstream.status_code}")
 
     print(f"[gateway] {filename} download by {customer['name']}")
-    _record_download(customer["name"], filename)
+    _record_download(customer["name"], filename, product_id)
 
     async def _close():
         await upstream.aclose()
