@@ -583,6 +583,29 @@ def _email_on_file(value, wanted: str) -> str | None:
     return None
 
 
+def _purchase_target(customers: dict, email: str) -> str | None:
+    """Which customer a purchase made with `email` extends, or None for new.
+
+    An address can be on more than one customer on purpose: a person's own
+    licence, and as an extra on their firm's company licence. Their
+    purchase belongs to the licence where the address is the main "email"
+    -- their own -- rather than whichever entry the file happens to sort
+    first. Only if no entry has it as the main address does an entry
+    carrying it as an extra take the purchase.
+    """
+    wanted = email.strip().lower()
+    fallback = None
+    for token, value in customers.items():
+        if not isinstance(value, dict) or not _email_on_file(value, wanted):
+            continue
+        main = value.get("email")
+        if isinstance(main, str) and main.strip().lower() == wanted:
+            return token
+        if fallback is None:
+            fallback = token
+    return fallback
+
+
 def _entry_sessions(value: dict) -> list:
     sessions = value.get("stripe_sessions")
     if isinstance(sessions, list):
@@ -671,19 +694,19 @@ async def _provision_purchase(session: dict) -> dict:
         ids = _session_products(session)
         term_days = _session_term_days(session)
         try:
-            if email:
-                for token, value in customers.items():
-                    if isinstance(value, dict) and _email_on_file(value, email):
-                        value["products"] = _merge_products(
-                            _entitlements(value)["products"], ids, term_days
-                        )
-                        value["stripe_sessions"] = [*_entry_sessions(value), session_id]
-                        value.pop("stripe_session", None)
-                        entry_name = value.get("name", name)
-                        await _write_customers_file(customers, sha, f"Extend repository access: {entry_name}")
-                        print(f"[gateway] stripe: extended {entry_name} <{email}> with {', '.join(ids)}")
-                        return {"token": token, "name": entry_name, "products": value["products"],
-                                "merged": True, "already_processed": False}
+            token = _purchase_target(customers, email) if email else None
+            if token is not None:
+                value = customers[token]
+                value["products"] = _merge_products(
+                    _entitlements(value)["products"], ids, term_days
+                )
+                value["stripe_sessions"] = [*_entry_sessions(value), session_id]
+                value.pop("stripe_session", None)
+                entry_name = value.get("name", name)
+                await _write_customers_file(customers, sha, f"Extend repository access: {entry_name}")
+                print(f"[gateway] stripe: extended {entry_name} <{email}> with {', '.join(ids)}")
+                return {"token": token, "name": entry_name, "products": value["products"],
+                        "merged": True, "already_processed": False}
 
             token = "edc_" + secrets.token_urlsafe(18)
             entry = {

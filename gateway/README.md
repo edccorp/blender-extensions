@@ -133,8 +133,12 @@ Any of them can recover the secret at `/recover` (it is mailed to the
 address that asked), a Stripe purchase made with any of them is added to
 this secret rather than creating a new one, and `show` finds the customer
 by any of them. `email` stays the main address -- new-purchase emails go
-there -- and `remove-email` on it promotes the next one. An address can be
-on only one customer; `add-email` refuses one that is already elsewhere.
+there -- and `remove-email` on it promotes the next one. `add-email` refuses an
+address that is already on another customer unless you pass `--shared` --
+for someone with their own licence who is also covered by their firm's.
+A shared address is stored as an extra, `/recover` sends it every secret
+it is on, and a purchase made with it goes to the customer whose *main*
+address it is (their own licence), whatever order the file is in.
 Keep `email` a single string when editing by hand: extra addresses go in
 the `emails` list.
 

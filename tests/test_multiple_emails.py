@@ -25,13 +25,15 @@ CLI_PATH = ROOT / "tools" / "customer.py"
 def _gateway_helpers():
     ns = {}
     for node in ast.parse(GATEWAY).body:
-        if getattr(node, "name", None) in {"_entry_emails", "_email_on_file"}:
+        if getattr(node, "name", None) in {"_entry_emails", "_email_on_file",
+                                           "_purchase_target"}:
             exec(compile(ast.Module([node], []), "<ast>", "exec"), ns)
     return ns
 
 
 NS = _gateway_helpers()
 entry_emails = NS["_entry_emails"]
+purchase_target = NS["_purchase_target"]
 email_on_file = NS["_email_on_file"]
 
 COMPANY = {"name": "Acme LLC", "email": "it@acme.com",
@@ -86,11 +88,17 @@ def test_an_address_not_on_the_entry_does_not_match():
 
 
 @pytest.mark.parametrize("route", [
-    "async def _provision_purchase(", "async def recover(", "async def register(",
+    "async def recover(", "async def register(",
 ])
 def test_every_route_that_matches_an_address_reads_all_of_them(route):
     body = GATEWAY.split(route, 1)[1].split("\n@app", 1)[0].split("\nasync def ", 1)[0]
     assert "_email_on_file(value," in body, f"{route} still matches one address"
+    assert 'value.get("email", "").strip().lower()' not in body
+
+
+def test_a_purchase_finds_its_customer_through_purchase_target():
+    body = GATEWAY.split("async def _provision_purchase(", 1)[1].split("\nasync def ", 1)[0]
+    assert "_purchase_target(customers, email)" in body
     assert 'value.get("email", "").strip().lower()' not in body
 
 
@@ -223,3 +231,78 @@ def test_show_lists_every_address(cli, capsys):
 @pytest.mark.parametrize("command", ["add-email", "remove-email"])
 def test_the_commands_are_reachable(command):
     assert f'sub.add_parser("{command}"' in CLI_PATH.read_text()
+
+
+# ------------------------------------- one address on more than one licence
+
+SEA = {
+    "edc_ronny": {"name": "Ronny Wahba", "email": "rwahba@sealimited.com"},
+    "edc_company": {"name": "SEA Limited (company license)",
+                    "email": "jhiggins@sealimited.com",
+                    "emails": ["rwahba@sealimited.com", "jswanson@sealimited.com"]},
+    "edc_john": {"name": "John Swanson", "email": "jswanson@sealimited.com"},
+}
+
+
+@pytest.mark.parametrize("order", [list(SEA), list(reversed(SEA))])
+def test_a_purchase_goes_to_the_licence_whose_main_address_it_is(order):
+    """Whichever way the file sorts, Ronny's renewal lands on his own
+    licence, not the company one that lists him as an extra."""
+    customers = {t: SEA[t] for t in order}
+    assert purchase_target(customers, "RWahba@sealimited.com") == "edc_ronny"
+    assert purchase_target(customers, "jswanson@sealimited.com") == "edc_john"
+
+
+def test_an_address_only_on_the_company_licence_goes_there():
+    assert purchase_target(SEA, "jhiggins@sealimited.com") == "edc_company"
+
+
+def test_an_extra_address_with_no_licence_of_its_own_extends_the_company_one():
+    customers = {"edc_company": {"name": "Co", "email": "it@co.com",
+                                 "emails": ["cad@co.com"]}}
+    assert purchase_target(customers, "cad@co.com") == "edc_company"
+
+
+def test_an_unknown_address_is_a_new_customer():
+    assert purchase_target(SEA, "new@sealimited.com") is None
+    assert purchase_target({"edc_x": "Plain String"}, "x@y.com") is None
+
+
+def test_shared_adds_an_address_that_is_on_another_customer(cli, capsys):
+    cli.state["customers"] = {
+        "edc_ronny": {"name": "Ronny Wahba", "email": "rwahba@sealimited.com"},
+        "edc_company": {"name": "SEA Limited"},
+    }
+    cli.cmd_add_email(types.SimpleNamespace(
+        customer="SEA Limited", emails=["jhiggins@sealimited.com", "rwahba@sealimited.com"],
+        shared=True))
+    company = cli.state["customers"]["edc_company"]
+    assert company["email"] == "jhiggins@sealimited.com"
+    assert company["emails"] == ["rwahba@sealimited.com"]
+    assert cli.state["customers"]["edc_ronny"] == {
+        "name": "Ronny Wahba", "email": "rwahba@sealimited.com"}, "his own licence changed"
+    assert "also on Ronny Wahba" in capsys.readouterr().out
+
+
+def test_a_shared_address_is_never_made_the_main_one(cli):
+    """The main address decides where purchases go; a shared one in that
+    slot would pull the person's own renewals onto the company licence."""
+    cli.state["customers"] = {
+        "edc_ronny": {"name": "Ronny Wahba", "email": "rwahba@sealimited.com"},
+        "edc_company": {"name": "SEA Limited"},
+    }
+    cli.cmd_add_email(types.SimpleNamespace(
+        customer="SEA Limited", emails=["rwahba@sealimited.com"], shared=True))
+    company = cli.state["customers"]["edc_company"]
+    assert "email" not in company
+    assert company["emails"] == ["rwahba@sealimited.com"]
+
+
+def test_without_shared_the_refusal_says_how_to_allow_it(cli, capsys):
+    cli.state["customers"] = {
+        "edc_ronny": {"name": "Ronny Wahba", "email": "rwahba@sealimited.com"},
+        "edc_company": {"name": "SEA Limited"},
+    }
+    with pytest.raises(SystemExit):
+        cli.cmd_add_email(add_email("SEA Limited", "rwahba@sealimited.com"))
+    assert "--shared" in capsys.readouterr().err

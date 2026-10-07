@@ -434,8 +434,13 @@ def cmd_add_email(args) -> None:
 
     Any address on the entry works at /recover, and a Stripe purchase made
     with any of them is added onto this secret rather than minting another.
-    That is also why one address may belong to only one customer: a
-    purchase or a recovery must never have two entries to choose between.
+
+    An address already on another customer is refused unless --shared is
+    given -- typically someone with their own licence who is also covered
+    by their firm's. A shared address is always stored as an extra, never
+    as the main address: the gateway sends a purchase to the customer whose
+    *main* address it is, so their own renewals keep landing on their own
+    licence, and /recover mails them every secret the address is on.
     """
     customers, sha = fetch()
     token = resolve_one(customers, args.customer)
@@ -450,13 +455,19 @@ def cmd_add_email(args) -> None:
             die(f"{email!r} is not an email address")
         others = [name_of(v) for t, v in customers.items()
                   if t != token and email.lower() in (a.lower() for a in emails_of(v))]
-        if others:
-            die(f"{email} is already on {others[0]}; one address can belong "
-                "to one customer only. Remove it there first with remove-email.")
+        if others and not getattr(args, "shared", False):
+            die(f"{email} is already on {others[0]}. Add --shared to put it on "
+                f"{name_of(value)} as well (their own purchases stay on "
+                f"{others[0]}), or remove it there first with remove-email.")
         if email.lower() in (a.lower() for a in emails_of(value)):
             print(f"{email} is already on {name_of(value)}.")
             continue
-        if not value.get("email"):
+        if others:
+            print(f"{email} is also on {', '.join(others)}: /recover will send "
+                  "both secrets, and purchases with it stay on "
+                  f"{others[0] if len(others) == 1 else 'the one where it is the main address'}.")
+            value["emails"] = [*(value.get("emails") or []), email]
+        elif not value.get("email"):
             value["email"] = email
         else:
             value["emails"] = [*(value.get("emails") or []), email]
@@ -565,6 +576,9 @@ def main() -> None:
     p = sub.add_parser("add-email", help="give a customer another address (company licenses)")
     p.add_argument("customer", help="customer name, email, or repository secret")
     p.add_argument("emails", nargs="+", metavar="email", help="one or more addresses to add")
+    p.add_argument("--shared", action="store_true",
+                   help="allow an address that is already on another customer "
+                        "(e.g. someone with their own licence, covered by a company one)")
     p.set_defaults(func=cmd_add_email)
 
     p = sub.add_parser("remove-email", help="take an address off a customer")
